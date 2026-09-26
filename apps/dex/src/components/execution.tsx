@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge, Card, Details, Identity, Row, Spinner, TxLink } from '@/components/ui/primitives'
 import type { AgentAction, ExecutionResult, PolicyCheck, ValidationResult } from '@/lib/agent/schema'
-import { loadSession, targetOf, useActionRunner, validateAction, type ExecuteResponse } from '@/lib/client/agent'
+import { targetOf, useActionRunner, useSessionVersion, validateAction, type ExecuteResponse } from '@/lib/client/agent'
 import { useApp } from '@/lib/client/app'
 import { cn, decimalString } from '@/lib/utils'
 
@@ -427,6 +427,7 @@ function QuoteBlock({ validation }: { validation: ValidationResult }) {
  */
 export function ActionFlow({ action, autonomous = false, onClose }: { action: AgentAction; autonomous?: boolean; onClose?: () => void }) {
   const runner = useActionRunner()
+  const sessionVersion = useSessionVersion()
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [phase, setPhase] = useState<'validating' | 'review' | 'signing' | 'executing' | 'done'>('validating')
@@ -436,11 +437,15 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
     try {
       // Autonomous = smart-account/session-key model: authorize ONCE, then act freely within the
       // on-chain limits. If a session is already open, execute silently; if not, open one now (a
-      // single signature) instead of asking again on this and every future action.
-      let approval = autonomous ? loadSession(targetOf(action)) : null
+      // single signature) instead of asking again on this and every future action. For EVM the single
+      // signature is an all-Buckets owner session, so it also covers the owner's other Buckets.
+      let approval = autonomous ? runner.currentSession(action) : null
       if (autonomous && !approval) {
         setPhase('signing')
-        approval = await runner.startSession(action.network, targetOf(action), 60)
+        approval =
+          action.network === 'sepolia'
+            ? await runner.startOwnerSession(60)
+            : await runner.startSession(action.network, targetOf(action), 60)
       }
       setPhase(approval ? 'executing' : 'signing')
       approval = approval ?? (await runner.approveAction(action))
@@ -463,7 +468,7 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
       .then((v) => {
         if (cancelled) return
         setValidation(v)
-        if (autonomous && v.ok && loadSession(targetOf(action))) void run(v)
+        if (autonomous && v.ok && runner.currentSession(action)) void run(v)
         else setPhase('review')
       })
       .catch((e: unknown) => !cancelled && (setError(e instanceof Error ? e.message : String(e)), setPhase('done')))
@@ -472,6 +477,14 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(action), autonomous])
+
+  // When a session opens elsewhere (another card's "Authorize", or the chat's "Authorize all agents" button), this
+  // card is waiting in review with a valid action — so execute it now, no second signature. One authorization
+  // cascades across every proposed action instead of prompting per card.
+  useEffect(() => {
+    if (autonomous && validation?.ok && phase === 'review' && !response && runner.currentSession(action)) void run(validation)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionVersion])
 
   if (phase === 'validating') {
     return (
@@ -535,14 +548,14 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
           <Button variant="primary" size="lg" className="w-full" disabled={phase === 'signing' || phase === 'executing'} onClick={() => void run(validation)}>
             {phase === 'signing' ? (
               <>
-                <Spinner /> {autonomous && !loadSession(targetOf(action)) ? 'Authorize the session (one message, no gas)…' : 'Approve in your wallet (message, no gas)…'}
+                <Spinner /> {autonomous && !runner.currentSession(action) ? 'Authorize the session (one message, no gas)…' : 'Approve in your wallet (message, no gas)…'}
               </>
             ) : phase === 'executing' ? (
               <>
                 <Spinner /> Executing on-chain…
               </>
             ) : autonomous ? (
-              loadSession(targetOf(action)) ? 'Execute' : 'Authorize agent & execute'
+              runner.currentSession(action) ? 'Execute' : 'Authorize agent & execute'
             ) : (
               'Execute'
             )}
@@ -550,8 +563,8 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
         ) : null}
         {validation?.ok && !response && phase === 'review' ? (
           <p className="text-center text-xs text-muted">
-            {autonomous && !loadSession(targetOf(action))
-              ? 'Authorize once — for the next hour the agent executes on its own key with no more prompts, bounded on-chain by this capability.'
+            {autonomous && !runner.currentSession(action)
+              ? 'Authorize once — for the next hour the agent executes on its own key across all your Buckets with no more prompts, each action bounded on-chain by its capability.'
               : autonomous
                 ? 'Autonomous session active — the agent submits with its own key, bounded on-chain by this capability. No signature needed.'
                 : 'You sign an approval message. The agent operator submits the transaction with its own key, bounded by this capability.'}

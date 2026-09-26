@@ -1,19 +1,25 @@
 import { formatUsd } from '@bucket/protocol-types'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Bot, Brain, Scale, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Bot, Brain, Fingerprint, Scale, ShieldCheck } from 'lucide-react'
 
 import { useState } from 'react'
 
-import { AgentChat, type QuickAction } from '@/components/agent-chat'
+import { AgentChat, type QuickAction, type Selection } from '@/components/agent-chat'
 import { AiSettings } from '@/components/ai-settings'
 import { ConfirmTx } from '@/components/confirm'
 import { Button } from '@/components/ui/button'
 import { Badge, Card, EmptyState, Identity, Row, Skeleton, StatusDot } from '@/components/ui/primitives'
 import { useApp, useOwnerWallet } from '@/lib/client/app'
-import { useSelectedBucket } from '@/lib/client/bucket-selection'
-import { useAgentStatus, useBucketView, useSuiBucket } from '@/lib/client/queries'
+import { useAgentCards, useAgentStatus, useOwnerAgentBuckets, useSuiBucket, type AgentCard, type OwnerAgentBucket } from '@/lib/client/queries'
 import { useSuiOwner } from '@/lib/client/sui'
 import { tokenAmount } from '@/lib/utils'
+
+/** The three demo Buckets are named by their ENS label (trading / savings / payments); title-case it for display. */
+function agentTitle(ensName: string): string {
+  const label = ensName.split('.')[0] ?? ''
+  const nice = label ? label.charAt(0).toUpperCase() + label.slice(1) : 'Bucket'
+  return `${nice} Agent`
+}
 
 function Pipeline() {
   const steps = [
@@ -35,70 +41,49 @@ function Pipeline() {
   )
 }
 
-function EvmAgents({ onConfigure }: { onConfigure: () => void }) {
+/** One agent card per owned Bucket (Trading / Savings / Payments), with its live authority and a Stop control. */
+function AgentBucketCard({ b, onConfigure }: { b: OwnerAgentBucket; onConfigure: () => void }) {
   const { deployment, bucket } = useApp()
   const { wallet } = useOwnerWallet()
   const status = useAgentStatus()
-  const sel = useSelectedBucket()
-  const view = useBucketView(sel.bucketId)
   const qc = useQueryClient()
   const [stop, setStop] = useState(false)
-  if (sel.isLoading || !status.data) return <Skeleton className="h-96" />
-  if (!sel.bucketId) return <EmptyState title="No Bucket yet" />
-  const ens = view.data?.ensName ?? ''
-  const caps = sel.agentCaps
-  const operatorName = caps[0] ? `${caps[0].capability.operatorLabel}.${ens}` : null
-  const best = [...caps].sort((a, b) => Number(b.capability.limits.maxExecutionValue - a.capability.limits.maxExecutionValue))[0]
-  const usdc = deployment.evm.tokens.find((t) => t.symbol === 'USDC')
-  const quick: QuickAction[] = [
-    ...sel.rebalanceCaps.slice(0, 1).map((c) => ({ label: 'Rebalance now', action: { action: 'rebalance' as const, network: 'sepolia' as const, bucketId: sel.bucketId!, capabilityId: c.id } })),
-    ...sel.swapCaps.slice(0, 1).flatMap((c) => [
-      { label: 'Swap 180 USDC → ETH', action: { action: 'swap' as const, network: 'sepolia' as const, bucketId: sel.bucketId!, capabilityId: c.id, sellSymbol: 'USDC', buySymbol: 'ETH', sellAmount: '180' } },
-      { label: 'Swap 620 USDC → ETH', hint: 'Above a $500 limit: BUCKET should block it', action: { action: 'swap' as const, network: 'sepolia' as const, bucketId: sel.bucketId!, capabilityId: c.id, sellSymbol: 'USDC', buySymbol: 'ETH', sellAmount: '620' } },
-    ]),
-    ...(usdc ? sel.payCaps.slice(0, 1).map((c) => ({ label: 'Pay 10 USDC', action: { action: 'pay' as const, network: 'sepolia' as const, bucketId: sel.bucketId!, capabilityId: c.id, symbol: 'USDC', amount: '10' } })) : []),
-  ]
+  const caps = b.agentCaps
+  const operatorName = caps[0] ? `${caps[0].capability.operatorLabel}.${b.ensName}` : null
+  const best = [...caps].sort((a, c) => Number(c.capability.limits.maxExecutionValue - a.capability.limits.maxExecutionValue))[0]
+  const perms = [b.swapCaps.length && 'Swap', b.rebalanceCaps.length && 'Rebalance', b.payCaps.length && 'Pay'].filter(Boolean).join(' · ') || '—'
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <div className="space-y-4">
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-accent" />
-              <div className="font-semibold">Trading Agent</div>
-            </div>
-            <Badge tone={caps.length ? 'green' : 'red'}>
-              <StatusDot active={caps.length > 0} /> {caps.length ? 'Active' : 'No authority'}
-            </Badge>
-          </div>
-          <div className="mt-4">
-            <div className="text-xs text-muted">Operator</div>
-            <Identity name={operatorName} address={status.data.evmOperator} />
-          </div>
-          <div className="mt-3 border-t border-line pt-2">
-            <Row label="Provider">{status.data.ai.configured ? `OpenAI · ${status.data.ai.model}` : 'OpenAI · not configured'}</Row>
-            <Row label="Bucket">{ens || '—'}</Row>
-            <Row label="Authority">{best ? `${formatUsd(best.capability.limits.maxExecutionValue)} / execution` : 'none'}</Row>
-            <Row label="Permissions">
-              {[sel.swapCaps.length && 'Swap', sel.rebalanceCaps.length && 'Rebalance', sel.payCaps.length && 'Pay'].filter(Boolean).join(' · ') || '—'}
-            </Row>
-            <Row label="Operator gas">{status.data.evmOperatorGasEth ? `${Number(status.data.evmOperatorGasEth).toFixed(4)} ETH` : '—'}</Row>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button size="sm" onClick={onConfigure}>
-              Configure
-            </Button>
-            <Button size="sm" variant="danger" disabled={!sel.isOwner || caps.length === 0} onClick={() => setStop(true)}>
-              Stop
-            </Button>
-          </div>
-        </Card>
+    <Card className="p-5">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          <Bot className="h-5 w-5 text-accent" />
+          <div className="font-semibold">{agentTitle(b.ensName)}</div>
+        </div>
+        <Badge tone={caps.length ? 'green' : 'red'}>
+          <StatusDot active={caps.length > 0} /> {caps.length ? 'Active' : 'No authority'}
+        </Badge>
       </div>
-      <AgentChat title="Trading Agent" selection={{ network: 'sepolia', bucketId: sel.bucketId }} aiConfigured={!!status.data.ai.configured} quickActions={quick} onConfigure={onConfigure} />
+      <div className="mt-4">
+        <div className="text-xs text-muted">Operator</div>
+        <Identity name={operatorName} address={status.data?.evmOperator ?? null} />
+      </div>
+      <div className="mt-3 border-t border-line pt-2">
+        <Row label="Bucket">{b.ensName || '—'}</Row>
+        <Row label="Authority">{best ? `${formatUsd(best.capability.limits.maxExecutionValue)} / execution` : 'none'}</Row>
+        <Row label="Permissions">{perms}</Row>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Button size="sm" onClick={onConfigure}>
+          Configure
+        </Button>
+        <Button size="sm" variant="danger" disabled={!wallet || caps.length === 0} onClick={() => setStop(true)}>
+          Stop
+        </Button>
+      </div>
       <ConfirmTx
         open={stop}
         onOpenChange={setStop}
-        title="Stop this agent?"
+        title={`Stop the ${agentTitle(b.ensName)}?`}
         confirmLabel={`Revoke ${caps.length} capabilit${caps.length === 1 ? 'y' : 'ies'}`}
         destructive
         run={async () => {
@@ -115,6 +100,119 @@ function EvmAgents({ onConfigure }: { onConfigure: () => void }) {
         Every capability naming {operatorName} is revoked on-chain ({caps.length} transaction{caps.length === 1 ? '' : 's'}). The agent can no longer execute anything
         on this Bucket. <span className="text-accent">Your assets remain in your wallet.</span>
       </ConfirmTx>
+    </Card>
+  )
+}
+
+/**
+ * ERC-8004 (Trustless Agents) identity panel. Each agent's ENS name is bound to its on-chain operator address and a
+ * capability manifest built from live chain state, so the agent is verifiable and discoverable — resolve the ENS
+ * name, then check each skill's capability on-chain against the BUCKET controller.
+ */
+function AgentIdentityPanel({ bucketIds }: { bucketIds: string[] }) {
+  const cards = useAgentCards()
+  const mine = (cards.data ?? []).filter((c) => bucketIds.includes(c['x-bucket'].bucketId))
+  if (cards.isLoading) return <Skeleton className="h-40" />
+  if (mine.length === 0) return null
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Fingerprint className="h-5 w-5 text-accent" />
+        <div className="font-semibold">Agent identity</div>
+        <Badge tone="green">ERC-8004</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        Each agent publishes a verifiable identity: its ENS name bound to the on-chain operator, with skills built from
+        live capabilities anyone can check on-chain.
+      </p>
+      <div className="mt-3 space-y-3">
+        {mine.map((card) => (
+          <AgentIdentityRow key={card['x-bucket'].bucketId} card={card} />
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function AgentIdentityRow({ card }: { card: AgentCard }) {
+  const reg = card.registrations[0]
+  return (
+    <div className="rounded-xl border border-line bg-panel px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="truncate text-sm font-medium">{reg?.ensName ?? card['x-bucket'].ensName}</div>
+        <a href={card['x-bucket'].verify} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-accent hover:underline">
+          AgentCard ↗
+        </a>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {card.trustModels.map((t) => (
+          <Badge key={t} tone="neutral">
+            {t}
+          </Badge>
+        ))}
+      </div>
+      <div className="mt-2 space-y-1">
+        {card.skills.map((s) => (
+          <div key={s.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted">{s.name}</span>
+            <span className="font-mono text-faint">{s['x-bucket-capability'].maxPerExecutionUsd} / exec</span>
+          </div>
+        ))}
+        {card.skills.length === 0 ? <div className="text-xs text-faint">No live skills</div> : null}
+      </div>
+    </div>
+  )
+}
+
+function EvmAgents({ onConfigure }: { onConfigure: () => void }) {
+  const { deployment } = useApp()
+  const status = useAgentStatus()
+  const { buckets, isLoading } = useOwnerAgentBuckets()
+  if (isLoading || !status.data) return <Skeleton className="h-96" />
+  if (buckets.length === 0) return <EmptyState title="No Bucket yet">Create or join a Bucket to give an agent authority.</EmptyState>
+
+  const usdc = deployment.evm.tokens.find((t) => t.symbol === 'USDC')
+  const selections: Selection[] = buckets.map((b) => ({ network: 'sepolia', bucketId: b.bucketId }))
+
+  // Combined quick actions across every owned Bucket. First a single chip that rebalances ALL Buckets at once
+  // (one owner signature → one rebalance per Bucket), then a per-Bucket rebalance, then trading swap/pay demos.
+  const rebalanceAll = buckets.flatMap((b) =>
+    b.rebalanceCaps.slice(0, 1).map((c) => ({ action: 'rebalance' as const, network: 'sepolia' as const, bucketId: b.bucketId, capabilityId: c.id })),
+  )
+  const quick: QuickAction[] = []
+  if (rebalanceAll.length > 1) quick.push({ label: `Rebalance all ${rebalanceAll.length} Buckets`, hint: 'One signature, one rebalance per Bucket', actions: rebalanceAll })
+  for (const b of buckets) {
+    const label = b.ensName.split('.')[0] ?? 'bucket'
+    for (const c of b.rebalanceCaps.slice(0, 1)) quick.push({ label: `Rebalance ${label}`, action: { action: 'rebalance', network: 'sepolia', bucketId: b.bucketId, capabilityId: c.id } })
+  }
+  const trading = buckets.find((b) => b.ensName.startsWith('trading')) ?? buckets[0]
+  if (trading) {
+    for (const c of trading.swapCaps.slice(0, 1)) {
+      quick.push({ label: 'Swap 180 USDC → ETH', action: { action: 'swap', network: 'sepolia', bucketId: trading.bucketId, capabilityId: c.id, sellSymbol: 'USDC', buySymbol: 'ETH', sellAmount: '180' } })
+      quick.push({ label: 'Swap 620 USDC → ETH', hint: 'Above a $500 limit: BUCKET should block it', action: { action: 'swap', network: 'sepolia', bucketId: trading.bucketId, capabilityId: c.id, sellSymbol: 'USDC', buySymbol: 'ETH', sellAmount: '620' } })
+    }
+    if (usdc) for (const c of trading.payCaps.slice(0, 1)) quick.push({ label: 'Pay 10 USDC', action: { action: 'pay', network: 'sepolia', bucketId: trading.bucketId, capabilityId: c.id, symbol: 'USDC', amount: '10' } })
+  }
+
+  const primary = selections[0]
+  return (
+    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+      <div className="space-y-4">
+        {buckets.map((b) => (
+          <AgentBucketCard key={b.bucketId} b={b} onConfigure={onConfigure} />
+        ))}
+        <AgentIdentityPanel bucketIds={buckets.map((b) => b.bucketId)} />
+      </div>
+      {primary ? (
+        <AgentChat
+          title="BUCKET Agents"
+          selection={primary}
+          selections={selections}
+          aiConfigured={!!status.data.ai.configured}
+          quickActions={quick}
+          onConfigure={onConfigure}
+        />
+      ) : null}
     </div>
   )
 }

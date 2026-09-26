@@ -14,6 +14,11 @@ const PRICE_BY_SYMBOL: Record<string, string> = {
   ETH: env.PRICE_ETH,
   SUI: env.PRICE_SUI,
   PEPE: env.PRICE_PEPE,
+  // Assets minted by `configure:extra-buckets` for the savings/payments Buckets.
+  DAI: '1',
+  WBTC: '60000',
+  USDT: '1',
+  EURC: '1.08',
 }
 
 export async function publishPrices(deployment: Deployment): Promise<void> {

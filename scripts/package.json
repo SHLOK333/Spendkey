@@ -10,6 +10,8 @@
     "deploy:evm": "tsx deploy/evm.ts",
     "deploy:sui": "tsx deploy/sui.ts",
     "configure:ens": "tsx configure/ens.ts",
+    "configure:buckets": "tsx configure/buckets.ts",
+    "configure:extra-buckets": "tsx configure/extra-buckets.ts",
     "configure:prices": "tsx configure/prices.ts",
     "demo": "tsx demo/run.ts",
     "typecheck": "tsc --noEmit -p ."

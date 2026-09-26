@@ -90,15 +90,24 @@ export interface ExecutionResult {
   readonly walletAfter: Array<{ symbol: string; amount: string }>
 }
 
-/** What the owner signs (an off-chain message, not a transaction) to approve one action or an autonomous session. */
-export function approvalMessage(input: { scope: 'action' | 'session'; target: string; actionHash?: string; expires: number }): string {
-  return input.scope === 'action'
-    ? `BUCKET agent approval\nbucket: ${input.target}\naction: ${input.actionHash}\nexpires: ${input.expires}`
-    : `BUCKET autonomous agent session\nbucket: ${input.target}\nexpires: ${input.expires}\nThe agent may execute only within this Bucket's on-chain authority.`
+/**
+ * What the owner signs (an off-chain message, not a transaction) to authorize the agent:
+ * - `action`  — exactly one action (copilot), bound to its hash.
+ * - `session` — a time-boxed autonomous session for ONE Bucket.
+ * - `session-all` — a single time-boxed session covering EVERY Bucket the signer owns. `target` is the owner
+ *   address (not a Bucket id), so one signature lets the agent act across all of the owner's Buckets. The chain
+ *   still enforces each Bucket's capability on every execution.
+ */
+export function approvalMessage(input: { scope: 'action' | 'session' | 'session-all'; target: string; actionHash?: string; expires: number }): string {
+  if (input.scope === 'action')
+    return `BUCKET agent approval\nbucket: ${input.target}\naction: ${input.actionHash}\nexpires: ${input.expires}`
+  if (input.scope === 'session-all')
+    return `BUCKET autonomous agent session (all Buckets)\nowner: ${input.target}\nexpires: ${input.expires}\nThe agent may execute only within the on-chain authority of Buckets owned by this address.`
+  return `BUCKET autonomous agent session\nbucket: ${input.target}\nexpires: ${input.expires}\nThe agent may execute only within this Bucket's on-chain authority.`
 }
 
 export const ApprovalSchema = z.object({
-  scope: z.enum(['action', 'session']),
+  scope: z.enum(['action', 'session', 'session-all']),
   expires: z.number().int(),
   signature: z.string().min(1),
   /** Signer address (EVM) or Sui address. */

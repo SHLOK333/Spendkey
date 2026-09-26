@@ -21,6 +21,11 @@ const PRICE_BY_SYMBOL: Record<string, string> = {
   ETH: process.env.PRICE_ETH ?? '2500',
   SUI: process.env.PRICE_SUI ?? '3.5',
   PEPE: process.env.PRICE_PEPE ?? '0.001',
+  // Savings/payments Bucket assets (see `configure:extra-buckets`); explicit so the refresher never resets them to $1.
+  DAI: process.env.PRICE_DAI ?? '1',
+  WBTC: process.env.PRICE_WBTC ?? '60000',
+  USDT: process.env.PRICE_USDT ?? '1',
+  EURC: process.env.PRICE_EURC ?? '1.08',
 }
 
 async function refreshPrices(): Promise<void> {

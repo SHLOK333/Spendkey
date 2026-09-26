@@ -21,6 +21,7 @@ const { explainError, explainMoveAbort } = await import('../src/lib/errors')
 const { BlockedError, agentIdentities, executeAction, validateAction, verifyApproval } = await import('../src/lib/server/agent')
 const { AI_COOKIE, resolveAiKey, sealKey } = await import('../src/lib/server/ai-key')
 const { agentContext } = await import('../src/lib/server/context')
+const { buildAgentCard, buildAgentCards } = await import('../src/lib/server/agent-card')
 const { evmServer } = await import('../src/lib/server/evm')
 const { protocolEvents } = await import('../src/lib/server/indexer')
 const { redactRpc, sepoliaRpcUrls } = await import('../src/lib/server/rpc')
@@ -167,32 +168,44 @@ app.post('/api/agent/validate', async (c) => {
   }
 })
 
-// --- Agent: chat -> single structured proposal -> schema check -> on-chain validation ----------------------
-const ChatBody = z.object({
-  messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1).max(40),
-  selection: z.discriminatedUnion('network', [
-    z.object({ network: z.literal('sepolia'), bucketId: z.string() }),
-    z.object({ network: z.literal('sui'), bucketObjectId: z.string() }),
-  ]),
-})
+// --- Agent: chat -> one or more structured proposals -> schema check -----------------------------------------
+// The chat can be scoped to a single Bucket (`selection`) or to EVERY Bucket the owner holds (`selections`), so one
+// conversation drives the trading, savings and payments agents at once. The model routes each request to the right
+// Bucket by choosing its bucketId + capabilityId from the context. Each returned action is re-validated client-side
+// (ActionFlow) and again on-chain before it can settle.
+const SelectionSchema = z.discriminatedUnion('network', [
+  z.object({ network: z.literal('sepolia'), bucketId: z.string() }),
+  z.object({ network: z.literal('sui'), bucketObjectId: z.string() }),
+])
+const ChatBody = z
+  .object({
+    messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1).max(40),
+    selection: SelectionSchema.optional(),
+    selections: z.array(SelectionSchema).min(1).max(8).optional(),
+  })
+  .refine((d) => d.selection || (d.selections && d.selections.length > 0), 'a selection is required')
 
-const CHAT_SYSTEM = `You are a BUCKET operator agent. You decide WHAT action to propose; BUCKET decides whether you are
-ALLOWED; the chain decides whether it can SETTLE. You never sign or move funds yourself.
+const CHAT_SYSTEM = `You are the BUCKET operator agent. You may govern SEVERAL Buckets at once (e.g. trading, savings,
+payments) — each Bucket in the context is a separate agent with its own capabilities. You decide WHAT action to
+propose; BUCKET decides whether you are ALLOWED; the chain decides whether it can SETTLE. You never sign or move
+funds yourself.
 
-Reply with a single JSON object: {"reply": string, "proposal": object | null}.
+Reply with a single JSON object: {"reply": string, "proposals": object[]}.
 
 "reply" is short, plain language for the wallet owner: state the relevant facts from the context (balances,
-allocation, limits) and what you propose.
+allocation, limits) and what you propose, naming the Bucket by its ensName when several exist.
 
-"proposal" is null, or exactly one structured action using ONLY ids and symbols from the context:
+"proposals" is an array of 0, 1 or MORE structured actions. Return several when the user asks to act on multiple
+Buckets (e.g. "rebalance all my buckets" -> one rebalance per Bucket that needs it). Each action uses ONLY ids and
+symbols from the context, and every bucketId/capabilityId MUST belong to the SAME Bucket entry in the context:
 - {"action":"swap","network":"sepolia","bucketId","capabilityId","sellSymbol","buySymbol","sellAmount"}
   The owner's wallet sells sellAmount of sellSymbol and receives buySymbol. Needs a capability with canSwap.
 - {"action":"rebalance","network":"sepolia","bucketId","capabilityId"}  Needs canRebalance; BUCKET picks the leg.
 - {"action":"pay","network":"sepolia","bucketId","capabilityId","symbol","amount"}  Needs canPay; goes to the fixed payee.
 - {"action":"sui_pay","network":"sui","bucketObjectId","amount"}  SUI from the Sui Bucket vault to the fixed payee.
 Amounts are decimal strings in token units (e.g. "180" for 180 USDC). If the user asks for more than a limit allows,
-still propose exactly what they asked: BUCKET will enforce the limit and explain the block. Never invent ids.
-If no capability of the agent fits the request, return proposal null and say which permission is missing.`
+still propose exactly what they asked: BUCKET will enforce the limit and explain the block. Never invent ids. If no
+capability fits the request, return an empty "proposals" array and say which permission or Bucket is missing.`
 
 app.post('/api/agent/chat', async (c) => {
   const parsed = ChatBody.safeParse(await c.req.json())
@@ -200,12 +213,15 @@ app.post('/api/agent/chat', async (c) => {
   const ai = resolveAiKey(getCookie(c, AI_COOKIE))
   if (!ai) return c.json({ error: 'No AI provider configured. Add your OpenAI key in Agents → Settings.' }, 400)
 
-  let context: Record<string, unknown>
+  const selections = parsed.data.selections ?? [parsed.data.selection!]
+  let contexts: Array<Record<string, unknown>>
   try {
-    context = await agentContext(parsed.data.selection)
+    contexts = await Promise.all(selections.map((s) => agentContext(s)))
   } catch (error) {
     return c.json({ error: redactRpc(`Could not load Bucket context: ${error instanceof Error ? error.message : String(error)}`) }, 502)
   }
+  // A single Bucket is still sent as one context object so the prompt is unchanged for the common case.
+  const contextPayload = contexts.length === 1 ? contexts[0] : { buckets: contexts }
 
   const completion = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -216,7 +232,7 @@ app.post('/api/agent/chat', async (c) => {
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: CHAT_SYSTEM },
-        { role: 'system', content: `Context (live chain state):\n${JSON.stringify(context)}` },
+        { role: 'system', content: `Context (live chain state):\n${JSON.stringify(contextPayload)}` },
         ...parsed.data.messages,
       ],
     }),
@@ -224,25 +240,26 @@ app.post('/api/agent/chat', async (c) => {
   if (!completion.ok) return c.json({ error: `OpenAI request failed (HTTP ${completion.status})` }, 502)
 
   const data = (await completion.json()) as { choices?: Array<{ message?: { content?: string } }> }
-  let out: { reply?: unknown; proposal?: unknown }
+  let out: { reply?: unknown; proposal?: unknown; proposals?: unknown }
   try {
     out = JSON.parse(data.choices?.[0]?.message?.content ?? '{}') as typeof out
   } catch {
-    return c.json({ reply: 'The model returned an unreadable answer. Please rephrase.', proposal: null, validation: null })
+    return c.json({ reply: 'The model returned an unreadable answer. Please rephrase.', proposals: [] })
   }
   const reply = typeof out.reply === 'string' ? out.reply : ''
-  if (out.proposal == null) return c.json({ reply, proposal: null, validation: null })
+  // Accept either the array form or a single "proposal" (models sometimes fall back to it).
+  const raw = Array.isArray(out.proposals) ? out.proposals : out.proposal != null ? [out.proposal] : []
 
-  // Natural language never becomes a transaction: only a schema-valid action is considered, then validated.
-  const action = AgentActionSchema.safeParse(out.proposal)
-  if (!action.success) {
-    return c.json({ reply, proposal: null, validation: null, note: 'The model proposed an action outside the allowed schema; it was discarded.' })
+  // Natural language never becomes a transaction: only schema-valid actions survive; the rest are discarded.
+  const proposals: unknown[] = []
+  let discarded = 0
+  for (const p of raw) {
+    const action = AgentActionSchema.safeParse(p)
+    if (action.success) proposals.push(action.data)
+    else discarded++
   }
-  try {
-    return c.json({ reply, proposal: action.data, validation: await validateAction(action.data) })
-  } catch (error) {
-    return c.json({ reply, proposal: action.data, validation: null, note: `Validation failed: ${error instanceof Error ? error.message : String(error)}` })
-  }
+  const note = discarded > 0 ? `${discarded} proposed action(s) were outside the allowed schema and discarded.` : undefined
+  return c.json({ reply, proposals, ...(note ? { note } : {}) })
 })
 
 // --- Agent: execute an owner-approved action (approval verified, limits enforced, then settle) --------------
@@ -277,6 +294,38 @@ app.post('/api/agent/execute', async (c) => {
       },
       200,
     )
+  }
+})
+
+// --- ERC-8004 agent identity (AgentCards) -------------------------------------------------------------------
+// Each BUCKET operator agent publishes a verifiable identity: its ENSv2 name bound to the on-chain operator
+// address, plus a capability manifest (skills) built from LIVE chain state. Counterparties resolve the ENS
+// name and verify each skill's capability on-chain — the card never claims authority the chain doesn't grant.
+function originOf(reqUrl: string): string {
+  const u = new URL(reqUrl)
+  return `${u.protocol}//${u.host}`
+}
+
+app.get('/api/agent/card', async (c) => {
+  const bucketId = c.req.query('bucketId')
+  const origin = originOf(c.req.url)
+  try {
+    if (bucketId) return c.json(await buildAgentCard(bucketId, origin))
+    return c.json({ cards: await buildAgentCards(origin) })
+  } catch (error) {
+    return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 500)
+  }
+})
+
+// A2A well-known location: serves the primary (first manifest) Bucket agent's card for auto-discovery.
+app.get('/.well-known/agent-card.json', async (c) => {
+  const origin = originOf(c.req.url)
+  try {
+    const cards = await buildAgentCards(origin)
+    if (!cards[0]) return c.json({ error: 'no agent available' }, 404)
+    return c.json(cards[0])
+  } catch (error) {
+    return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 500)
   }
 })
 

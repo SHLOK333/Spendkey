@@ -462,23 +462,25 @@ export async function validateAction(action: AgentAction): Promise<ValidationRes
  *  agent's authority. */
 export async function verifyApproval(action: AgentAction, approval: Approval): Promise<void> {
   if (approval.expires < Math.floor(Date.now() / 1000)) throw new Error('approval expired')
-  const target = action.action === 'sui_pay' ? action.bucketObjectId : action.bucketId
-  const message = approvalMessage({
-    scope: approval.scope,
-    target,
-    actionHash: keccak256(toBytes(canonicalAction(action))),
-    expires: approval.expires,
-  })
+
   if (action.action === 'sui_pay') {
     const s = suiServer()
     if (!s) throw new Error('Sui not configured')
     const bucket = await s.reader.getBucket(action.bucketObjectId)
+    // `session-all` binds the owner address, not a single Bucket, so one signature covers every Bucket the owner holds.
+    const target = approval.scope === 'session-all' ? bucket.owner : action.bucketObjectId
+    const message = approvalMessage({ scope: approval.scope, target, actionHash: keccak256(toBytes(canonicalAction(action))), expires: approval.expires })
     const pk = await verifyPersonalMessageSignature(new TextEncoder().encode(message), approval.signature)
     if (pk.toSuiAddress() !== bucket.owner) throw new Error('approval was not signed by the Bucket owner')
     return
   }
+
   const { bucket, publicClient } = evmServer()
   const snapshot = await bucket.evm.loadBucket(action.bucketId as Hex)
+  // A `session-all` signature is over the owner address and reused for every Bucket; each execution is still bound
+  // to the true holder (checked here) and to that Bucket's on-chain capability (checked in executeAction).
+  const target = approval.scope === 'session-all' ? (approval.signer as Address) : (action.bucketId as string)
+  const message = approvalMessage({ scope: approval.scope, target, actionHash: keccak256(toBytes(canonicalAction(action))), expires: approval.expires })
   if (!isAddressEqual(approval.signer as Address, snapshot.holder)) throw new Error('approval was not signed by the Bucket owner')
   const valid = await publicClient.verifyMessage({ address: snapshot.holder, message, signature: approval.signature as Hex })
   if (!valid) throw new Error('invalid approval signature')

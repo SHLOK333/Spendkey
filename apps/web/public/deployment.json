@@ -46,6 +46,30 @@
         "address": "0x6ab4d43e840bE1546C282BF2104fDDcb8bF5DDdB",
         "decimals": 18,
         "suiType": ""
+      },
+      {
+        "symbol": "DAI",
+        "address": "0x9408746500D24A65206311D2245750CF7a67c247",
+        "decimals": 18,
+        "suiType": ""
+      },
+      {
+        "symbol": "WBTC",
+        "address": "0xd7288ea9Ca4431a7e70aD66d8e288E06aE71d66d",
+        "decimals": 8,
+        "suiType": ""
+      },
+      {
+        "symbol": "USDT",
+        "address": "0xF1C541B2276D3143154517c52a00e522136D89C6",
+        "decimals": 6,
+        "suiType": ""
+      },
+      {
+        "symbol": "EURC",
+        "address": "0x3E01031d02b81274FB59cC5070A2E10f8C612C2f",
+        "decimals": 6,
+        "suiType": ""
       }
     ]
   },
@@ -70,7 +94,7 @@
         {
           "label": "trading-agent",
           "nonce": "1",
-          "capabilityId": "0xefd82867a814d759ba73fd88c9042c8f905ebb5f6046d018a554fb87fc507cd7",
+          "capabilityId": "0x1678c92f8aa2b268b20f4d0dbe4f1e465475450130e18329b92c6b6463fb30c1",
           "operatorLabel": "exec",
           "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
           "permissions": 1
@@ -78,10 +102,42 @@
         {
           "label": "payments-agent",
           "nonce": "2",
-          "capabilityId": "0xbdb89e96f52ee3cfe67a15ba87595f41a3ef13e13199e3fb31abcf7545126834",
+          "capabilityId": "0x020a39197d8e8692355f64a9a5b4b220ca36ecff5e1f39c8a1f513e540b2095f",
           "operatorLabel": "exec",
           "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
           "permissions": 4
+        }
+      ]
+    },
+    {
+      "label": "savings",
+      "ensName": "savings.shlok.eth",
+      "bucketId": "0xf41b3bf9462083d640dd917242359d5e0ddced1e2a6a003339a4c9ef83586e12",
+      "holder": "0x04274c7bE78c3A0e7493122E12A97edC11c2eA9e",
+      "capabilities": [
+        {
+          "label": "trading-agent",
+          "nonce": "1",
+          "capabilityId": "0x79fce65123d422774a96a71d88509d6ef4c0abc1efbd220f8054ed56ebe81001",
+          "operatorLabel": "exec",
+          "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
+          "permissions": 1
+        }
+      ]
+    },
+    {
+      "label": "payments",
+      "ensName": "payments.shlok.eth",
+      "bucketId": "0x588b31d2ff427c76e5aa9c4da3852fa9f506784e7de5ab75299e9ca8e2f1010c",
+      "holder": "0x04274c7bE78c3A0e7493122E12A97edC11c2eA9e",
+      "capabilities": [
+        {
+          "label": "trading-agent",
+          "nonce": "1",
+          "capabilityId": "0x830fdecd6d3613f300fd0302fcdc908af6a1e3fbd03f6f3e650d91476b072728",
+          "operatorLabel": "exec",
+          "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
+          "permissions": 1
         }
       ]
     }

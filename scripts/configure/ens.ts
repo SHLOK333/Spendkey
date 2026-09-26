@@ -185,15 +185,22 @@ async function main(): Promise<void> {
     info(`${bucket}.${label}.eth`, owner.account.address)
   }
 
-  step(`ENSv2: operator ${env.ENS_OPERATOR_LABEL}.trading.${label}.eth`)
-  const bucketRegistry = await ensureSubregistry(ownerRegistry, 'trading', `trading.${label}.eth`)
-  await ensureSubname(bucketRegistry, env.ENS_OPERATOR_LABEL, operatorAddress, 0n, expiry)
-  info('bucket registry', bucketRegistry)
-  info('operator', operatorAddress)
+  // Every Bucket name gets its own subregistry holding the operator identity, because a capability's
+  // `operatorLabel` is resolved as a subname *under that Bucket's own name* (e.g. `exec.savings.<owner>.eth`).
+  // Without it, `issue()` reverts with OperatorNameNotRegistered. `bucketRegistry` in the manifest points at
+  // trading's (the canonical demo bucket); the others resolve on-chain via their own subregistry.
+  step(`ENSv2: operator ${env.ENS_OPERATOR_LABEL} under each Bucket`)
+  let tradingRegistry: Address = zeroAddress
+  for (const bucket of BUCKET_LABELS) {
+    const registry = await ensureSubregistry(ownerRegistry, bucket, `${bucket}.${label}.eth`)
+    await ensureSubname(registry, env.ENS_OPERATOR_LABEL, operatorAddress, 0n, expiry)
+    info(`${env.ENS_OPERATOR_LABEL}.${bucket}.${label}.eth`, operatorAddress)
+    if (bucket === 'trading') tradingRegistry = registry
+  }
 
   deployment.ens = { ownerName: `${label}.eth`, ownerAddress: owner.account.address }
   deployment.evm.ens.ownerRegistry = ownerRegistry
-  deployment.evm.ens.bucketRegistry = bucketRegistry
+  deployment.evm.ens.bucketRegistry = tradingRegistry
   writeManifest(deployment)
 }
 

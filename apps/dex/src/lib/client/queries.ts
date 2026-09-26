@@ -1,10 +1,10 @@
-import { CapabilityStatus, type Capability, type EffectiveLimits } from '@bucket/protocol-types'
+import { CapabilityStatus, Permission, hasPermissions, type Capability, type EffectiveLimits } from '@bucket/protocol-types'
 import type { SuiCapabilityView } from '@bucket/sdk'
 import { valueOf } from '@bucket/vm'
 import { useQuery } from '@tanstack/react-query'
 import { erc20Abi, isAddressEqual, type Address, type Hex } from 'viem'
 
-import { useApp } from './app'
+import { useApp, useOwnerWallet } from './app'
 
 export interface WalletAsset {
   readonly symbol: string
@@ -121,6 +121,126 @@ export function useCapabilities(bucketId: Hex | null) {
         }),
       )
       return rows.reverse()
+    },
+  })
+}
+
+export interface OwnerAgentBucket {
+  readonly bucketId: Hex
+  readonly holder: Address
+  readonly ensName: string
+  readonly agentCaps: CapabilityRow[]
+  readonly swapCaps: CapabilityRow[]
+  readonly rebalanceCaps: CapabilityRow[]
+  readonly payCaps: CapabilityRow[]
+}
+
+/**
+ * Every EVM Bucket the connected wallet owns, each with the agent operator's live capabilities on it. This is what
+ * binds all of the owner's agents (trading, savings, payments) to a single chat: the chat reasons over all of them
+ * and one owner-signed session authorizes execution across the whole set.
+ */
+export function useOwnerAgentBuckets() {
+  const { address } = useOwnerWallet()
+  const { bucket } = useApp()
+  const { buckets, isLoading } = useKnownBuckets()
+  const agent = useAgentStatus()
+  const operator = agent.data?.evmOperator ?? null
+  const owned = address ? buckets.filter((b) => isAddressEqual(b.holder, address)) : []
+  const ids = owned.map((b) => b.bucketId)
+  const q = useQuery({
+    queryKey: ['owner-agent-buckets', ids, operator],
+    enabled: ids.length > 0,
+    refetchInterval: 20_000,
+    queryFn: async (): Promise<OwnerAgentBucket[]> =>
+      Promise.all(
+        owned.map(async (b) => {
+          const [view, capIds, epoch, snapshot, now] = await Promise.all([
+            bucket.getBucket(b.bucketId),
+            bucket.evm.capabilitiesOf(b.bucketId),
+            bucket.evm.epochOf(b.bucketId),
+            bucket.evm.loadBucket(b.bucketId),
+            bucket.evm.blockTimestamp(),
+          ])
+          const rows: CapabilityRow[] = await Promise.all(
+            capIds.map(async (id) => {
+              const capability = await bucket.evm.getCapability(id)
+              const live =
+                capability.status === CapabilityStatus.Active &&
+                capability.epoch === epoch &&
+                capability.policyVersion === snapshot.policyVersion &&
+                Number(now) <= capability.validUntil &&
+                Number(now) >= capability.validAfter
+              const limits = live ? await bucket.evm.effectiveLimits(b.bucketId, id).catch(() => null) : null
+              return { id, capability, limits, live }
+            }),
+          )
+          const agentCaps = rows.filter((r) => r.live && operator && isAddressEqual(r.capability.operator, operator as Address))
+          return {
+            bucketId: b.bucketId,
+            holder: b.holder,
+            ensName: view.ensName,
+            agentCaps,
+            swapCaps: agentCaps.filter((c) => hasPermissions(c.capability.permissions, Permission.Swap)),
+            rebalanceCaps: agentCaps.filter((c) => hasPermissions(c.capability.permissions, Permission.Rebalance)),
+            payCaps: agentCaps.filter((c) => hasPermissions(c.capability.permissions, Permission.Pay)),
+          }
+        }),
+      ),
+  })
+  return { buckets: q.data ?? [], isLoading: isLoading || q.isLoading, isOwner: !!address && owned.length > 0 }
+}
+
+export interface AgentCardSkill {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly tags: string[]
+  readonly 'x-bucket-capability': {
+    readonly capabilityId: string
+    readonly operatorName: string
+    readonly assets: string[]
+    readonly maxPerExecutionUsd: string
+    readonly maxDailyUsd: string
+    readonly validUntil: string
+    readonly status: string
+    readonly payee?: string
+  }
+}
+
+export interface AgentCard {
+  readonly protocolVersion: string
+  readonly name: string
+  readonly description: string
+  readonly version: string
+  readonly registrations: Array<{ agentId: string; agentAddress: string; ensName: string; chainId: number }>
+  readonly trustModels: string[]
+  readonly skills: AgentCardSkill[]
+  readonly 'x-bucket': {
+    readonly standard: string
+    readonly bucketId: string
+    readonly ensName: string
+    readonly owner: string
+    readonly status: string
+    readonly network: string
+    readonly custody: string
+    readonly controller: string
+    readonly registry: string | null
+    readonly verify: string
+  }
+}
+
+/** ERC-8004 AgentCards for every EVM Bucket agent in the deployment (identity + on-chain-verifiable capabilities). */
+export function useAgentCards() {
+  return useQuery({
+    queryKey: ['agent-cards'],
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    queryFn: async (): Promise<AgentCard[]> => {
+      const res = await fetch('/api/agent/card', { cache: 'no-store' })
+      const body = (await res.json()) as { cards?: AgentCard[]; error?: string }
+      if (!res.ok || !body.cards) throw new Error(body.error ?? 'agent cards unavailable')
+      return body.cards
     },
   })
 }

@@ -1,22 +1,25 @@
-import { ArrowUp, Bot, Sparkles, Zap } from 'lucide-react'
+import { ArrowUp, Bot, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { ActionFlow } from '@/components/execution'
 import { Badge, Spinner } from '@/components/ui/primitives'
 import type { AgentAction } from '@/lib/agent/schema'
-import { clearSession } from '@/lib/client/agent'
+import { clearOwnerSession, loadOwnerSession, useActionRunner } from '@/lib/client/agent'
 import { cn } from '@/lib/utils'
 
 interface Message {
   readonly role: 'user' | 'assistant'
   readonly content: string
-  readonly action?: AgentAction | null
+  /** One or more structured actions the agent proposed (each routed to its own Bucket). */
+  readonly actions?: AgentAction[]
   readonly note?: string
 }
 
 export interface QuickAction {
   readonly label: string
-  readonly action: AgentAction
+  /** A single action, or several (e.g. "rebalance all Buckets") executed together under one session. */
+  readonly action?: AgentAction
+  readonly actions?: AgentAction[]
   readonly hint?: string
 }
 
@@ -136,31 +139,56 @@ function Chips({ actions, onPick }: { actions: QuickAction[]; onPick: (q: QuickA
 export function AgentChat({
   title,
   selection,
+  selections,
   aiConfigured,
   quickActions,
   onConfigure,
 }: {
   title: string
+  /** The primary Bucket (used when only one agent is bound). */
   selection: Selection
+  /** Every Bucket this chat governs; when set, the agent reasons over all of them at once. */
+  selections?: Selection[]
   aiConfigured: boolean
   quickActions: QuickAction[]
   onConfigure: () => void
 }) {
-  const target = selection.network === 'sui' ? selection.bucketObjectId : selection.bucketId
+  const scope = selections && selections.length > 0 ? selections : [selection]
+  const scopeKey = scope.map((s) => (s.network === 'sui' ? s.bucketObjectId : s.bucketId)).join(',')
+  const runner = useActionRunner()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [authorizing, setAuthorizing] = useState(false)
+  const [sessionOpen, setSessionOpen] = useState(false)
   // Default to autonomous (session-key) mode: the owner authorizes once on the first action, then the
   // agent acts with no further prompts — every execution still bounded on-chain by the capability.
   const [mode, setMode] = useState<'copilot' | 'autonomous'>('autonomous')
   const bottom = useRef<HTMLDivElement>(null)
 
+  const hasEvm = scope.some((s) => s.network === 'sepolia')
+  const refreshSession = () => setSessionOpen(!!loadOwnerSession(runner.ownerAddress))
   useEffect(() => {
     setMode('autonomous')
-  }, [target])
+    refreshSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, runner.ownerAddress])
   useEffect(() => {
     void bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  async function authorizeAll() {
+    if (authorizing) return
+    setAuthorizing(true)
+    try {
+      await runner.startOwnerSession(60)
+      refreshSession()
+    } catch {
+      // wallet rejected — leave the button available to retry
+    } finally {
+      setAuthorizing(false)
+    }
+  }
 
   async function send(text: string) {
     const next: Message[] = [...messages, { role: 'user', content: text }]
@@ -171,11 +199,12 @@ export function AgentChat({
       const res = await fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ selection, messages: next.map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ selections: scope, messages: next.map((m) => ({ role: m.role, content: m.content })) }),
       })
-      const body = (await res.json()) as { reply?: string; proposal?: AgentAction | null; note?: string; error?: string }
+      const body = (await res.json()) as { reply?: string; proposals?: AgentAction[]; note?: string; error?: string }
       if (!res.ok) throw new Error(body.error ?? 'agent unavailable')
-      setMessages((m) => [...m, { role: 'assistant', content: body.reply ?? '', action: body.proposal ?? null, ...(body.note ? { note: body.note } : {}) }])
+      const actions = body.proposals ?? []
+      setMessages((m) => [...m, { role: 'assistant', content: body.reply ?? '', ...(actions.length ? { actions } : {}), ...(body.note ? { note: body.note } : {}) }])
     } catch (e) {
       setMessages((m) => [...m, { role: 'assistant', content: e instanceof Error ? e.message : String(e) }])
     } finally {
@@ -184,7 +213,8 @@ export function AgentChat({
   }
 
   function propose(q: QuickAction) {
-    setMessages((m) => [...m, { role: 'user', content: q.label }, { role: 'assistant', content: 'Running BUCKET check…', action: q.action }])
+    const actions = q.actions ?? (q.action ? [q.action] : [])
+    setMessages((m) => [...m, { role: 'user', content: q.label }, { role: 'assistant', content: 'Running BUCKET check…', ...(actions.length ? { actions } : {}) }])
   }
 
   const empty = messages.length === 0
@@ -203,9 +233,24 @@ export function AgentChat({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          {mode === 'autonomous' && hasEvm ? (
+            sessionOpen ? (
+              <Badge tone="green"><ShieldCheck className="mr-1 h-2.5 w-2.5" /> All agents authorized</Badge>
+            ) : (
+              <button
+                onClick={() => void authorizeAll()}
+                disabled={authorizing || !runner.ownerAddress}
+                title="Sign one message to authorize the agent across all your Buckets for 60 minutes"
+                className="flex items-center gap-1 rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                {authorizing ? <Spinner /> : <ShieldCheck className="h-3 w-3" />}
+                {authorizing ? 'Sign in wallet…' : 'Authorize all agents (1 signature)'}
+              </button>
+            )
+          ) : null}
           <button
             onClick={() => {
-              if (mode === 'autonomous') { clearSession(target); setMode('copilot') }
+              if (mode === 'autonomous') { clearOwnerSession(runner.ownerAddress); refreshSession(); setMode('copilot') }
               else setMode('autonomous')
             }}
             className={cn(
@@ -272,9 +317,11 @@ export function AgentChat({
                       </div>
                     ) : null}
                     {m.note ? <div className="ml-7.5 text-xs text-warn">{m.note}</div> : null}
-                    {m.action ? (
-                      <div className="ml-7.5">
-                        <ActionFlow action={m.action} autonomous={mode === 'autonomous'} />
+                    {m.actions?.length ? (
+                      <div className="ml-7.5 space-y-3">
+                        {m.actions.map((a, j) => (
+                          <ActionFlow key={`${i}-${j}`} action={a} autonomous={mode === 'autonomous'} />
+                        ))}
                       </div>
                     ) : null}
                   </div>

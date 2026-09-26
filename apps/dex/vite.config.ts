@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: {
         '/api': { target: `http://localhost:${env.PORT || 3101}`, changeOrigin: true },
+        '/.well-known': { target: `http://localhost:${env.PORT || 3101}`, changeOrigin: true },
       },
     },
     build: {
