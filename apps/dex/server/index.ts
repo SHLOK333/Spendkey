@@ -24,6 +24,7 @@ const { agentContext } = await import('../src/lib/server/context')
 const { evmServer } = await import('../src/lib/server/evm')
 const { protocolEvents } = await import('../src/lib/server/indexer')
 const { serverEnv } = await import('../src/lib/server/env')
+const { onboardConfig, onboardFaucet } = await import('../src/lib/server/onboard')
 const { register } = await import('../src/instrumentation')
 
 const app = new Hono()
@@ -32,6 +33,22 @@ const app = new Hono()
 app.get('/api/deployment', (c) => {
   const raw = readFileSync(path.join(repoRoot, 'deployments', 'sepolia.json'), 'utf8')
   return new Response(raw, { headers: { 'content-type': 'application/json' } })
+})
+
+// --- Onboarding: agent operator identity a new owner grants to (public; no secrets) ------------------------
+app.get('/api/onboard/config', (c) => c.json(onboardConfig()))
+
+// --- Onboarding faucet: seed a brand-new owner wallet (deployer key, testnet-only mock tokens) --------------
+const FaucetBody = z.object({ address: z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'invalid address') })
+
+app.post('/api/onboard/faucet', async (c) => {
+  const parsed = FaucetBody.safeParse(await c.req.json())
+  if (!parsed.success) return c.json({ error: parsed.error.message }, 400)
+  try {
+    return c.json(await onboardFaucet(parsed.data.address as `0x${string}`))
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+  }
 })
 
 // --- Activity: decoded protocol events from Sepolia --------------------------------------------------------

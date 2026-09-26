@@ -4,6 +4,7 @@ import Activity from '@/app/activity/page'
 import Agents from '@/app/agents/page'
 import Buckets from '@/app/buckets/page'
 import NewBucketPermission from '@/app/buckets/new/page'
+import Onboard from '@/app/onboard/page'
 import Landing from '@/app/page'
 import Pay from '@/app/pay/page'
 import Portfolio from '@/app/portfolio/page'
@@ -30,6 +31,7 @@ export function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<Landing />} />
+        <Route path="onboard" element={<Onboard />} />
         <Route path="trade" element={<Trade />} />
         <Route path="pay" element={<Pay />} />
         <Route path="agents" element={<Agents />} />
