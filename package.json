@@ -1,11 +1,11 @@
 {
   "name": "bucket",
   "private": true,
-  "description": "BUCKET: programmable multi-asset financial containers (ENSv2 authority, Sui state, 1inch Aqua + SwapVM execution)",
+  "description": "BUCKET: programmable multi-asset financial containers (ENSv2 authority, 1inch Aqua + SwapVM execution)",
   "license": "MIT",
   "packageManager": "pnpm@9.15.3",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "build": "pnpm -r --filter ./packages/** --filter ./vm run build",
