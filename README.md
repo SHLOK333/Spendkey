@@ -18,6 +18,34 @@ Two chains, **independently issued and independently enforced** — not one shar
 
 ---
 
+## RALE — the Risk-Adaptive Liquidity Engine
+
+[`apps/dex/src/app/rale/page.tsx`](apps/dex/src/app/rale/page.tsx) · route `/rale` (Insights menu)
+
+RALE is BUCKET's **adaptive maker-pricing engine**: instead of a static curve, a Bucket quotes a *state-dependent*
+executable price that reacts to inventory, volatility and trade size in real time — and then settles that price
+through the same on-chain program every other action uses.
+
+```
+P(q, Sₜ) = P*·(1 − λ·Iₜ)  ±  Pₜ·( sₜ/2 + η·|q|/L )        sₜ = s₀ + α·σₜ + β·|Iₜ|
+           └ reservation ┘     └ half-spread ┘└ size impact ┘   └ base + vol + inventory skew ┘
+```
+
+- **Every input is real** — `Pₜ` and inventory `Iₜ` come from live on-chain prices + wallet balances
+  (`useWalletAssets`), `σₜ` is session-observed volatility sampled from mids. It's a model *over real chain data*,
+  not a simulation.
+- **One hero visual** — a hand-built 3D isometric **execution-cost surface** `z = |execPrice − mid| / mid` over the
+  (trade size q) × (inventory I) plane, morphing on every parameter change. (No chart library — framer-motion is the
+  only viz dep, so all charts are hand-built SVG.)
+- **It settles for real** — the pipeline `0xd0 InventoryState → 0xd1 Spread → 0xd2 SizeImpact → 0xd3 Settlement`
+  maps one-to-one onto the SwapVM program below, and **Execute** routes the computed trade through `<ActionFlow>` →
+  1inch Aqua + SwapVM, gated on the Bucket's live Swap capability and on-chain `maxExecutionValue`.
+
+RALE is the **policy** (what price); the opcodes are the **enforcement** (may this fill happen, at that price, within
+limits). Same program for the preview and the fill, so they can never disagree.
+
+---
+
 ## Where 1inch is used: **Aqua = liquidity, SwapVM = execution**
 
 BUCKET's EVM execution layer is built directly on **1inch's [SwapVM](https://github.com/1inch/swap-vm) and Aqua**.
