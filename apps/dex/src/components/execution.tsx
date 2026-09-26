@@ -424,13 +424,34 @@ function QuoteBlock({ validation }: { validation: ValidationResult }) {
  * → execution by the agent operator → receipt. `autonomous` skips the per-action signature when an owner-signed
  * session exists, but never skips validation.
  */
-export function ActionFlow({ action, autonomous = false, onClose }: { action: AgentAction; autonomous?: boolean; onClose?: () => void }) {
+export type ActionPhase = 'validating' | 'review' | 'signing' | 'executing' | 'done'
+export type ActionOutcome = 'executed' | 'blocked' | 'failed' | null
+
+export function ActionFlow({
+  action,
+  autonomous = false,
+  onClose,
+  onPhase,
+}: {
+  action: AgentAction
+  autonomous?: boolean
+  onClose?: () => void
+  /** Observes the live execution phase (and terminal outcome) so callers can drive their own UI (e.g. an animated pipeline). */
+  onPhase?: (phase: ActionPhase, outcome: ActionOutcome) => void
+}) {
   const runner = useActionRunner()
   const sessionVersion = useSessionVersion()
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [phase, setPhase] = useState<'validating' | 'review' | 'signing' | 'executing' | 'done'>('validating')
+  const [phase, setPhase] = useState<ActionPhase>('validating')
   const [response, setResponse] = useState<ExecuteResponse | null>(null)
+
+  // Report phase + terminal outcome upward. Runs after each phase/response change.
+  useEffect(() => {
+    const outcome: ActionOutcome = phase !== 'done' ? null : error ? 'failed' : (response?.status ?? 'failed')
+    onPhase?.(phase, outcome)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, response, error])
 
   async function run(v: ValidationResult) {
     try {

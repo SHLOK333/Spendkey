@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatUnits } from 'viem'
 
 import { ConnectWallet } from '@/components/connect'
-import { ActionFlow } from '@/components/execution'
+import { ActionFlow, type ActionOutcome, type ActionPhase } from '@/components/execution'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge, Card, EmptyState, Segmented } from '@/components/ui/primitives'
@@ -300,24 +300,98 @@ const PIPELINE = [
   { op: '0xd3', name: 'Settlement', icon: Zap },
 ]
 
-function Pipeline() {
+export type PipeState = 'idle' | 'running' | 'done' | 'blocked'
+
+const PIPE_STATUS: Record<PipeState, { label: string; tint: string }> = {
+  idle: { label: 'idle', tint: '#5b5f6e' },
+  running: { label: 'executing…', tint: '#5ef0ff' },
+  done: { label: 'settled', tint: '#c6f24e' },
+  blocked: { label: 'blocked', tint: '#f87171' },
+}
+
+function nodeTint(hasOp: boolean, state: PipeState): string {
+  if (state === 'done') return '#c6f24e'
+  if (state === 'blocked') return '#f87171'
+  return hasOp ? '#c6f24e' : '#8b93ff'
+}
+
+/**
+ * The live SwapVM execution program. Idle: a soft glow drifts through the stages (the engine "idling"). Running:
+ * a bright packet sweeps the whole pipeline and every connector flows — the taker's order moving through
+ * 0xd0→0xd3. Done: the whole chain latches green (settled). Blocked: it goes red (a guard rejected it).
+ */
+function Pipeline({ state = 'idle' }: { state?: PipeState }) {
+  const n = PIPELINE.length
+  const [head, setHead] = useState(0)
+  useEffect(() => {
+    if (state === 'done' || state === 'blocked') return
+    const period = state === 'running' ? 240 : 700
+    const id = setInterval(() => setHead((h) => (h + 1) % n), period)
+    return () => clearInterval(id)
+  }, [state, n])
+
+  const terminal = state === 'done' || state === 'blocked'
+  const status = PIPE_STATUS[state]
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {PIPELINE.map((s, i) => (
-        <div key={s.name} className="contents">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.08 }}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-2.5 py-1.5"
-          >
-            <s.icon className="h-3.5 w-3.5 text-accent" />
-            <span className="text-[11px] font-medium text-fg">{s.name}</span>
-            {s.op ? <span className="font-mono text-[10px] text-faint">{s.op}</span> : null}
-          </motion.div>
-          {i < PIPELINE.length - 1 ? <span className="text-faint">→</span> : null}
-        </div>
-      ))}
+      {PIPELINE.map((s, i) => {
+        const active = !terminal && i === head
+        const trail = !terminal && i === (head - 1 + n) % n
+        const lit = terminal || active || trail
+        const tint = nodeTint(!!s.op, state)
+        const connFlow = state === 'running' || (state === 'idle' && i === head)
+        return (
+          <div key={s.name} className="contents">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{
+                opacity: state === 'blocked' && i < n - 1 ? 0.45 : 1,
+                scale: active ? 1.07 : 1,
+                borderColor: lit ? tint : 'var(--color-line)',
+                boxShadow: active
+                  ? `0 0 18px ${tint}77`
+                  : state === 'done'
+                    ? `0 0 10px ${tint}44`
+                    : '0 0 0px rgba(0,0,0,0)',
+              }}
+              transition={{ duration: 0.28 }}
+              className="flex items-center gap-1.5 rounded-lg border bg-panel-2 px-2.5 py-1.5"
+            >
+              <motion.span animate={{ color: lit ? tint : 'var(--color-muted)' }} transition={{ duration: 0.28 }} className="flex">
+                <s.icon className="h-3.5 w-3.5" />
+              </motion.span>
+              <span className="text-[11px] font-medium" style={{ color: lit ? 'var(--color-fg)' : 'var(--color-muted)' }}>
+                {s.name}
+              </span>
+              {s.op ? <span className="font-mono text-[10px]" style={{ color: lit ? tint : 'var(--color-faint)' }}>{s.op}</span> : null}
+            </motion.div>
+            {i < n - 1 ? (
+              <div className="relative h-[2px] w-5 shrink-0 overflow-hidden rounded-full" style={{ background: 'var(--color-line)' }}>
+                <motion.div
+                  className="absolute inset-y-0 left-0 w-2.5 rounded-full"
+                  style={{ background: tint }}
+                  animate={connFlow ? { x: ['-10px', '20px'], opacity: [0, 1, 0] } : state === 'done' ? { x: '18px', opacity: 0.6 } : { x: '-10px', opacity: 0 }}
+                  transition={connFlow ? { duration: 0.5, repeat: Infinity, ease: 'linear', delay: i * 0.04 } : { duration: 0.3 }}
+                />
+              </div>
+            ) : null}
+          </div>
+        )
+      })}
+      <motion.span
+        className="ml-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold"
+        animate={{ color: status.tint, backgroundColor: `${status.tint}1a` }}
+        transition={{ duration: 0.28 }}
+      >
+        <motion.span
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ background: status.tint }}
+          animate={state === 'running' ? { opacity: [1, 0.3, 1] } : { opacity: 1 }}
+          transition={state === 'running' ? { duration: 0.9, repeat: Infinity } : { duration: 0.2 }}
+        />
+        {status.label}
+      </motion.span>
     </div>
   )
 }
@@ -337,8 +411,16 @@ export default function RalePage() {
   const [base, setBase] = useState('ETH')
   const [quote, setQuote] = useState('USDC')
   const [review, setReview] = useState<AgentAction | null>(null)
+  const [pipe, setPipe] = useState<PipeState>('idle')
   const [history, setHistory] = useState<number[]>([])
   const baseline = useRef<number | null>(null)
+
+  // Drive the SwapVM pipeline animation from the real execution phase inside the dialog.
+  const onExecPhase = (phase: ActionPhase, outcome: ActionOutcome) => {
+    if (phase === 'done') setPipe(outcome === 'executed' ? 'done' : 'blocked')
+    else if (phase === 'review') setPipe('idle')
+    else setPipe('running') // validating · signing · executing
+  }
 
   const set = <K extends keyof Params>(k: K, v: number) => setParams((p) => ({ ...p, [k]: v }))
 
@@ -535,13 +617,33 @@ export default function RalePage() {
               <span className="text-sm font-semibold">SwapVM execution program</span>
               <span className="ml-auto text-xs text-faint">Aqua = liquidity · SwapVM = execution · RALE = policy</span>
             </div>
-            <Pipeline />
+            <Pipeline state={pipe} />
           </Card>
         </div>
       </div>
 
-      <Dialog open={!!review} onOpenChange={(o) => !o && setReview(null)} title="Ship strategy → on-chain swap" description="RALE-priced order, checked against your Bucket's live on-chain authority.">
-        {review ? <ActionFlow action={review} onClose={() => setReview(null)} /> : null}
+      <Dialog
+        open={!!review}
+        onOpenChange={(o) => {
+          if (!o) {
+            setReview(null)
+            setPipe('idle')
+          }
+        }}
+        title="Ship strategy → on-chain swap"
+        description="RALE-priced order, checked against your Bucket's live on-chain authority."
+      >
+        {review ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-line bg-panel-2/60 p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted">
+                <Zap className="h-3.5 w-3.5 text-accent" /> Aqua + SwapVM
+              </div>
+              <Pipeline state={pipe} />
+            </div>
+            <ActionFlow action={review} onClose={() => setReview(null)} onPhase={onExecPhase} />
+          </div>
+        ) : null}
       </Dialog>
     </div>
   )
