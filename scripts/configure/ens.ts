@@ -126,7 +126,7 @@ async function deployUserRegistry(purpose: string): Promise<Address> {
       encodeFunctionData({
         abi: userRegistryAbi,
         functionName: 'initialize',
-        args: [owner.account.address, USER_REGISTRY_OWNER_ROLES],
+        args: [[{ account: owner.account.address, roleBitmap: USER_REGISTRY_OWNER_ROLES }]],
       }),
     ],
   })

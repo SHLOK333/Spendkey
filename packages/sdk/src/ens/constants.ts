@@ -1,20 +1,23 @@
 import type { Address } from 'viem'
 
 /**
- * Official ENSv2 Sepolia deployment (ensdomains/contracts-v2, `contracts/deployments/sepolia`,
- * tag `sepolia-deployment-2026-06-29`, chainId 11155111).
+ * Official ENSv2 Sepolia deployment (ensdomains/contracts-v2, `contracts/docs/addresses/sepolia.md`,
+ * the 2026-09-15 "clean testnet" redeploy that app.ens.dev / sepolia.app.ens.domains now index, chainId 11155111).
+ *
+ * NOTE: this redeploy wiped the earlier `sepolia-deployment-2026-06-29` set BUCKET originally targeted
+ * (ethRegistry `0x67b728…`). Names registered against the old set are not visible on the live ENS app.
  */
 export const ENSV2_SEPOLIA = {
   chainId: 11155111,
-  rootRegistry: '0x11b5bfbe9078d826b1edbdd1cfc12f5828d9f50c',
-  ethRegistry: '0x67b728a792e789a8978b30cf1b3b641f19354b43',
-  ethRegistrar: '0xa4449a0dd2b83007553d9b1d28b583a46a805a30',
-  userRegistryImpl: '0x840fa461059862ea466a711e8c98c8de732061c0',
-  verifiableFactory: '0x118bc31a50d559f7015a8da26d54b3b030cdb70f',
+  rootRegistry: '0x9703dbd26dab89504490994138cf2c575251a9ce',
+  ethRegistry: '0x657ea849311d3d5823348dded7c2aaafb3ede09e',
+  ethRegistrar: '0xabe76f6c8dfced81aa5a2bb8034202a7136b94ca',
+  userRegistryImpl: '0xa80338aaa8d23831cea25e858d1774534abb0263',
+  verifiableFactory: '0x9e726eb570beb6bceb495ab8cda7df517d4e841c',
   universalResolver: '0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe',
-  permissionedResolverImpl: '0x7e4b2d59938930168024201752ee5503df402303',
+  permissionedResolverImpl: '0x14f09fd05d4585759e54844dc9b00147131cf243',
   /** Payment token accepted by the Sepolia `.eth` registrar; public `mint`. */
-  mockUsdc: '0xd3322b29a7bdee707d1684676f149bf41aa3422f',
+  mockUsdc: '0x16f95d91dba7da3aca778ec053df0ff6c6a8aa8e',
 } as const satisfies Record<string, Address | number>
 
 /** `RegistryRolesLib` (ENSv2 PermissionedRegistry EAC roles). */

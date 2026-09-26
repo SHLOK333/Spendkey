@@ -2,7 +2,8 @@ import { parseAbi } from 'viem'
 
 /**
  * ENSv2 contract fragments not covered by the vendored `IPermissionedRegistry` interface.
- * Signatures are taken from ensdomains/contracts-v2 (Sepolia deployment tag `sepolia-deployment-2026-06-29`).
+ * Signatures are taken from ensdomains/contracts-v2 (Sepolia 2026-09-15 redeploy; interface unchanged from the
+ * earlier `sepolia-deployment-2026-06-29` set — only the addresses and payment token moved).
  */
 
 export const ethRegistrarAbi = parseAbi([
@@ -23,7 +24,9 @@ export const verifiableFactoryAbi = parseAbi([
 ])
 
 export const userRegistryAbi = parseAbi([
-  'function initialize(address rootAccount, uint256 roleBitmap)',
+  // 2026-09-15 redeploy: initialize now takes an array of {account, roleBitmap} root grants
+  // (was `initialize(address rootAccount, uint256 roleBitmap)`).
+  'function initialize((address account, uint256 roleBitmap)[] grants)',
   'function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expiry) returns (uint256 tokenId)',
   'function setSubregistry(uint256 anyId, address registry)',
   'function setParent(address parent, string label)',

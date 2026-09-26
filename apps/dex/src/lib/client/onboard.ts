@@ -181,7 +181,7 @@ export async function runOnboarding(ctx: OnboardContext, emit: (p: Progress) => 
       address: ENSV2_SEPOLIA.verifiableFactory as Address,
       abi: verifiableFactoryAbi,
       functionName: 'deployProxy',
-      args: [ENSV2_SEPOLIA.userRegistryImpl as Address, salt, encodeFunctionData({ abi: userRegistryAbi, functionName: 'initialize', args: [owner, USER_REGISTRY_OWNER_ROLES] })],
+      args: [ENSV2_SEPOLIA.userRegistryImpl as Address, salt, encodeFunctionData({ abi: userRegistryAbi, functionName: 'initialize', args: [[{ account: owner, roleBitmap: USER_REGISTRY_OWNER_ROLES }]] })],
     })
     const receipt = await publicClient.getTransactionReceipt({ hash })
     const [deployed] = parseEventLogs({ abi: verifiableFactoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs })
