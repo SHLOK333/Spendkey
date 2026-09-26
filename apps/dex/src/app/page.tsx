@@ -12,6 +12,22 @@ export default function Landing() {
       <DoodleSparkle className="absolute left-4 top-40 hidden opacity-60 md:block" width={28} height={28} />
       <DoodleWave className="pointer-events-none absolute left-1/2 top-[280px] -z-10 hidden -translate-x-1/2 md:block" width={520} height={100} />
 
+      {/* Intro video — what BUCKET is */}
+      <div className="mx-auto mb-12 max-w-3xl">
+        <div className="overflow-hidden rounded-3xl border border-line bg-panel shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7)]">
+          <video
+            className="aspect-video w-full object-cover"
+            src="/intro.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            controls
+            preload="metadata"
+          />
+        </div>
+      </div>
+
       <div className="mx-auto max-w-3xl text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel-2 px-3 py-1 text-xs font-medium text-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Self-custodial · 1inch Aqua + SwapVM · ENSv2

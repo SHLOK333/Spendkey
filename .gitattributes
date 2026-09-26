@@ -1,2 +1,9 @@
 * text=auto eol=lf
 *.sol linguist-language=Solidity
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
