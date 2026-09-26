@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noCheck": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["apps/dex/src/*"]
+    }
+  },
+  "include": ["api", "apps/dex/src", "apps/dex/server"]
+}
