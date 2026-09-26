@@ -4,14 +4,20 @@ import {
   hasPermissions,
   labelId,
   type AssetConfig,
+  IntentKind,
   type BucketSnapshot,
+  type Capability,
+  type EffectiveLimits,
   type ExecutionReceipt,
+  type Intent,
   type PolicyParams,
 } from '@bucket/protocol-types'
 import {
+  diagnoseUnfillable,
   isOutOfPolicy,
   maxFillAmountIn,
   planRebalance,
+  quoteExactOut,
   simulateFill,
   valuate,
   verifyBucketOrder,
@@ -73,6 +79,24 @@ export interface RebalanceExecution {
   /** Pre-trade simulation (sizing and the taker's minAmountOut); the auction concession grows until inclusion. */
   readonly fill: FillSimulation
   /** The controller's on-chain receipt: the executed amounts. */
+  readonly receipt: ExecutionReceipt
+}
+
+export interface SwapPreview {
+  readonly snapshot: BucketSnapshot
+  readonly limits: EffectiveLimits
+  readonly capability: Capability
+  /** Exact simulation of the fill (amounts, USD value, failure mirroring the on-chain error name). */
+  readonly fill: FillSimulation
+  readonly now: bigint
+}
+
+export interface SwapExecution {
+  readonly openTx: Hash
+  readonly intentId: Hex
+  readonly fillTx: Hash
+  /** Pre-trade simulation; the executed amounts are in `receipt`. */
+  readonly fill: FillSimulation
   readonly receipt: ExecutionReceipt
 }
 
@@ -194,15 +218,28 @@ export class BucketClient {
     emit({ stage: 'policy-check', status: 'done', detail: `max deviation ${plan.valuation.maxAbsDeviationWad}` })
 
     emit({ stage: 'open-intent', status: 'running' })
+    const planTokenOut = snapshot.assets[plan.outIndex]?.token
+    const planTokenIn = snapshot.assets[plan.inIndex]?.token
     let opened: OpenedIntent | null = null
     let openTx: Hash | null = null
-    if (input.reuseActiveIntent && snapshot.activeIntent !== zeroHash) {
+    if (snapshot.activeIntent !== zeroHash) {
+      // The bucket has at most one open intent (controller invariant C3), so a leftover intent occupies
+      // the slot. Only reuse it when the caller opted in AND it is a live rebalance in this exact
+      // direction; otherwise (expired, a swap/pay intent, or the wrong leg) cancel it and open fresh —
+      // reusing a stale or mismatched intent is why a rebalance can report "no fillable amount".
       const existingIntent = await this.evm.getIntent(snapshot.activeIntent)
       const currentTime = Number(await this.evm.blockTimestamp())
-      if (existingIntent.expiresAt > currentTime) {
+      const reusable =
+        !!input.reuseActiveIntent &&
+        existingIntent.expiresAt > currentTime &&
+        existingIntent.kind === IntentKind.Rebalance &&
+        !!planTokenOut &&
+        !!planTokenIn &&
+        isAddressEqual(existingIntent.tokenOut, planTokenOut) &&
+        isAddressEqual(existingIntent.tokenIn, planTokenIn)
+      if (reusable) {
         opened = { intentId: snapshot.activeIntent, intent: existingIntent }
       } else {
-        // Expired intent still occupies the slot — cancel it so we can open fresh.
         await this.evm.cancelIntent(input.wallet, input.bucketId)
         snapshot = await this.evm.loadBucket(input.bucketId)
       }
@@ -240,7 +277,11 @@ export class BucketClient {
     const intentBudgetCap = opened.intent.remainingOut * 999n / 1000n
     const aquaCap = aqua.balance < intentBudgetCap ? aqua.balance : intentBudgetCap
     const sized = maxFillAmountIn(snapshot, opened.intent, conservativeLimits, aquaCap, fillNow)
-    if (!sized) throw new BucketClientError('no fillable amount under the current policy/limits')
+    if (!sized) {
+      throw new BucketClientError(
+        `no fillable amount under the current policy/limits — ${diagnoseUnfillable(snapshot, opened.intent, conservativeLimits, aquaCap, fillNow)}`,
+      )
+    }
     const fill = simulateFill(snapshot, opened.intent, limits, sized.amountIn, fillNow + 1n)
     if (!fill.ok) throw new BucketClientError(`fill rejected by policy: ${fill.failure}`)
     emit({ stage: 'quote-verify', status: 'done', detail: `program verified; amountIn=${fill.amountIn}` })
@@ -274,6 +315,143 @@ export class BucketClient {
     })
 
     return { openTx, intentId: opened.intentId, fillTx: executed.hash, fill, receipt: executed.value.receipt }
+  }
+
+  // ---------------------------------------------------------------------------------------------- swap
+
+  /**
+   * Read-only quote + policy check of an operator-directed swap in which the holder sells `amountOut` of `tokenOut`
+   * for `tokenIn`, evaluated exactly as `BucketQuote` + `BucketSpendLimit` + the SWAP post-state band check would
+   * for an intent opened now under `capabilityId`. Nothing is submitted.
+   */
+  async previewSwap(input: {
+    bucketId: Hex
+    capabilityId: Hex
+    tokenOut: Address
+    tokenIn: Address
+    amountOut: bigint
+  }): Promise<SwapPreview> {
+    const [snapshot, limits, capability, now] = await Promise.all([
+      this.evm.loadBucket(input.bucketId),
+      this.evm.effectiveLimits(input.bucketId, input.capabilityId),
+      this.evm.getCapability(input.capabilityId),
+      this.evm.blockTimestamp(),
+    ])
+    const intent = this.hypotheticalSwapIntent(input, capability.operator, Number(now), snapshot.policyVersion)
+    const amountIn = this.swapAmountIn(snapshot, intent, input.amountOut, limits.maxSlippageBps)
+    const fill = simulateFill(snapshot, intent, limits, amountIn, now)
+    return { snapshot, limits, capability, fill, now }
+  }
+
+  /**
+   * Full operator-directed swap: capability check -> open SWAP intent -> canonical order + program verification ->
+   * exact-in fill through Aqua + SwapVM -> the controller's receipt. The holder's wallet pays `amountOut` of
+   * `tokenOut` (at most) and receives `tokenIn`; the operator supplies `tokenIn`.
+   */
+  async executeSwap(input: {
+    bucketId: Hex
+    capabilityId: Hex
+    /** Operator wallet: must be the capability's live operator, holding `PERM_SWAP`. */
+    wallet: EvmWallet
+    tokenOut: Address
+    tokenIn: Address
+    amountOut: bigint
+    onStage?: (update: StageUpdate) => void
+  }): Promise<SwapExecution> {
+    const emit = input.onStage ?? (() => undefined)
+    const operator = input.wallet.account.address
+
+    emit({ stage: 'capability-check', status: 'running' })
+    const capability = await this.evm.getCapability(input.capabilityId)
+    if (!isAddressEqual(capability.operator, operator)) {
+      throw new BucketClientError(`${operator} is not the operator of capability ${input.capabilityId}`)
+    }
+    if (!hasPermissions(capability.permissions, Permission.Swap)) {
+      throw new BucketClientError(`capability ${input.capabilityId} lacks SWAP`)
+    }
+    emit({ stage: 'capability-check', status: 'done', detail: `capability ${input.capabilityId}` })
+
+    emit({ stage: 'policy-check', status: 'running' })
+    const preview = await this.previewSwap(input)
+    if (!preview.fill.ok) throw new BucketClientError(`swap rejected by policy: ${preview.fill.failure}`)
+    emit({ stage: 'policy-check', status: 'done', detail: `value ${preview.fill.valueOut}` })
+
+    emit({ stage: 'open-intent', status: 'running' })
+    // A bucket has at most one open intent (controller invariant C3). Clear any leftover intent first,
+    // otherwise openSwapIntent reverts and later runs report a stale intent as unfillable.
+    const preSwap = await this.evm.loadBucket(input.bucketId)
+    if (preSwap.activeIntent !== zeroHash) {
+      await this.evm.cancelIntent(input.wallet, input.bucketId)
+    }
+    const opened = await this.evm.openSwapIntent(
+      input.wallet,
+      input.bucketId,
+      input.capabilityId,
+      input.tokenOut,
+      input.tokenIn,
+      input.amountOut,
+    )
+    emit({ stage: 'open-intent', status: 'done', txHash: opened.hash, detail: opened.value.intentId })
+
+    emit({ stage: 'quote-verify', status: 'running' })
+    const snapshot = await this.evm.loadBucket(input.bucketId)
+    const meta = await this.evm.getBucket(input.bucketId)
+    const { order } = await this.evm.strategyOrder(input.bucketId, input.tokenOut, input.tokenIn)
+    verifyBucketOrder(order, {
+      holder: snapshot.holder,
+      controller: this.evm.contracts.controller,
+      bucketId: input.bucketId,
+      strategyNonce: meta.strategyNonce,
+      strategyExpiry: meta.strategyExpiry,
+    })
+    const limits = await this.evm.effectiveLimits(input.bucketId, input.capabilityId)
+    const fillNow = (await this.evm.blockTimestamp()) + 1n
+    const intent = opened.value.intent
+    const amountIn = this.swapAmountIn(snapshot, intent, intent.remainingOut, limits.maxSlippageBps)
+    const fill = simulateFill(snapshot, intent, limits, amountIn, fillNow)
+    if (!fill.ok) throw new BucketClientError(`fill rejected by policy: ${fill.failure}`)
+    emit({ stage: 'quote-verify', status: 'done', detail: `program verified; amountIn=${fill.amountIn}` })
+
+    emit({ stage: 'execution', status: 'running' })
+    const executed = await this.evm.fillIntent(input.wallet, {
+      order,
+      intent,
+      amountIn: fill.amountIn,
+      minAmountOut: fill.amountOut,
+    })
+    emit({ stage: 'execution', status: 'done', txHash: executed.hash })
+    emit({ stage: 'post-state', status: 'done', detail: 'both assets inside their hard bands' })
+    return { openTx: opened.hash, intentId: opened.value.intentId, fillTx: executed.hash, fill, receipt: executed.value.receipt }
+  }
+
+  private hypotheticalSwapIntent(
+    input: { bucketId: Hex; capabilityId: Hex; tokenOut: Address; tokenIn: Address; amountOut: bigint },
+    operator: Address,
+    now: number,
+    policyVersion: number,
+  ): Intent {
+    return {
+      bucketId: input.bucketId,
+      capabilityId: input.capabilityId,
+      operator,
+      kind: IntentKind.Swap,
+      tokenOut: input.tokenOut,
+      tokenIn: input.tokenIn,
+      remainingOut: input.amountOut,
+      openedAt: now,
+      expiresAt: now,
+      policyVersion,
+      nonce: 0n,
+    }
+  }
+
+  /** Exact-in amount sized at the largest auction concession the capability chain allows, so the output never
+   *  exceeds `budgetOut` however far the concession has grown by inclusion (the intent budget is a hard cap). */
+  private swapAmountIn(snapshot: BucketSnapshot, intent: Intent, budgetOut: bigint, maxSlippageBps: number): bigint {
+    const assetOut = snapshot.assets.find((a) => isAddressEqual(a.token, intent.tokenOut))
+    const assetIn = snapshot.assets.find((a) => isAddressEqual(a.token, intent.tokenIn))
+    if (!assetOut || !assetIn) throw new BucketClientError('token is not a policy asset of this Bucket')
+    return quoteExactOut((budgetOut * 999n) / 1000n, assetIn, assetOut, BigInt(maxSlippageBps))
   }
 
   // ---------------------------------------------------------------------------------------------- helpers
