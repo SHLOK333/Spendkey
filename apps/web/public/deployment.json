@@ -1,0 +1,84 @@
+{
+  "evm": {
+    "network": "sepolia",
+    "chainId": 11155111,
+    "explorer": "https://sepolia.etherscan.io",
+    "deployedAt": "2026-09-25T13:57:49.097Z",
+    "startBlock": 11779647,
+    "contracts": {
+      "aqua": "0x219F46B2eC62F36617EA11b8dDC8a83b53261e78",
+      "router": "0x1B99c7FE80b670d0d689B0887302A4a156009b20",
+      "authority": "0x2C9292F5fAc8F835CD4d73ee726D7CC3c2E31fFE",
+      "capabilities": "0x501B555BE33c0fCe8c35A9bB15861A8DEA48deD3",
+      "controller": "0x378a11968905265150CAE36237C2f77665F64bcA",
+      "priceFeed": "0xFA99973D4906D7bf24C8E5314417cDc4cA0f3f9d"
+    },
+    "ens": {
+      "rootRegistry": "0x11b5BfbE9078D826b1eDBDd1cFC12f5828D9F50C",
+      "ethRegistry": "0x67b728a792e789a8978b30cF1b3b641f19354b43",
+      "ethRegistrar": "0xa4449a0dD2b83007553D9b1d28b583A46A805a30",
+      "userRegistryImpl": "0x840Fa461059862Ea466A711E8C98c8dE732061C0",
+      "verifiableFactory": "0x118Bc31A50d559F7015a8Da26d54B3b030CdB70F",
+      "ownerRegistry": "0xde0c9F3d3027DD3a31533498265F99E05fe2D305",
+      "bucketRegistry": "0x81bDd0Be3b174dB822e73b15920E6A722E43e4bD"
+    },
+    "tokens": [
+      {
+        "symbol": "USDC",
+        "address": "0x73569B9eAf403Ca0c1b00b82783F118e6F89A71b",
+        "decimals": 6,
+        "suiType": ""
+      },
+      {
+        "symbol": "ETH",
+        "address": "0x9C3Fe7Eb69a0F917F9cA32A80a78DCD07d442f4D",
+        "decimals": 18,
+        "suiType": ""
+      },
+      {
+        "symbol": "SUI",
+        "address": "0xa6017314E82d292c1572eE2095edC34b4c643Fe9",
+        "decimals": 9,
+        "suiType": "0x2::sui::SUI"
+      },
+      {
+        "symbol": "PEPE",
+        "address": "0x6ab4d43e840bE1546C282BF2104fDDcb8bF5DDdB",
+        "decimals": 18,
+        "suiType": ""
+      }
+    ]
+  },
+  "sui": null,
+  "ens": {
+    "ownerName": "shlok.eth",
+    "ownerAddress": "0x04274c7bE78c3A0e7493122E12A97edC11c2eA9e"
+  },
+  "buckets": [
+    {
+      "label": "trading",
+      "ensName": "trading.shlok.eth",
+      "bucketId": "0x8399b07df455fbafb3a192656f49d0f10fdfa7f6507d344d93ad1fe1bb99314f",
+      "holder": "0x04274c7bE78c3A0e7493122E12A97edC11c2eA9e",
+      "capabilities": [
+        {
+          "label": "trading-agent",
+          "nonce": "1",
+          "capabilityId": "0xefd82867a814d759ba73fd88c9042c8f905ebb5f6046d018a554fb87fc507cd7",
+          "operatorLabel": "exec",
+          "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
+          "permissions": 1
+        },
+        {
+          "label": "payments-agent",
+          "nonce": "2",
+          "capabilityId": "0xbdb89e96f52ee3cfe67a15ba87595f41a3ef13e13199e3fb31abcf7545126834",
+          "operatorLabel": "exec",
+          "operatorAddress": "0x99d765da09E24a017232dB28260391Fa4a656aF3",
+          "permissions": 4
+        }
+      ]
+    }
+  ],
+  "suiBuckets": []
+}
