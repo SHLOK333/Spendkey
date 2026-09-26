@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @bucket/dex build",
+  "buildCommand": "pnpm --filter @bucket/dex build && pnpm --filter @bucket/dex exec esbuild api/[[...route]].ts --bundle --platform=node --format=esm --packages=external --outfile=../../api/[[...route]].js",
   "outputDirectory": "apps/dex/dist",
   "rewrites": [
     { "source": "/.well-known/agent-card.json", "destination": "/api/.well-known/agent-card.json" }

@@ -20,3 +20,4 @@ apps/dex/dist/
 
 .vercel
 .env*.local
+api/[[...route]].js
