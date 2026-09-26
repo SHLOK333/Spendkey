@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+cache/
+broadcast/
+build/
+.env
+.env.*
+!.env.example
+.ref/
+.tools/
+*.log
+contracts/sui/build/
+contracts/evm/out/
+contracts/evm/cache/
+apps/web/dist/
