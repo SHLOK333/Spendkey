@@ -7,6 +7,6 @@
     { "source": "/.well-known/agent-card.json", "destination": "/api/.well-known/agent-card.json" }
   ],
   "crons": [
-    { "path": "/api/cron/refresh-prices", "schedule": "*/30 * * * *" }
+    { "path": "/api/cron/refresh-prices", "schedule": "0 0 * * *" }
   ]
 }
