@@ -93,6 +93,10 @@ export const DeploymentSchema = z.object({
       network: z.enum(['testnet', 'devnet', 'localnet']),
       packageId: suiId,
       explorer: z.string().url().nullable(),
+      /** Shared `access::AccessControl` (EAC) object every role check and `pay` reads. */
+      accessControlId: suiId.optional(),
+      /** Shared SuiNS object used by `resolve_suins_principal` / `owner_grant_roles_by_suins`. */
+      suinsObjectId: suiId.optional(),
     })
     .nullable(),
   ens: z
