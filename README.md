@@ -114,6 +114,66 @@ operator with PAY can fulfil payments to that one destination, never choose an a
 
 ---
 
+## BUCKET SwapVM — Custom instruction set
+
+Every EVM swap and rebalance runs through `BucketSwapVMRouter`, which only understands the **Bucket instruction set
+(`BucketOpcodes`)** — a minimal, standalone bank containing `Deadline`, `Salt`, and four custom BUCKET instructions
+in the `0xd0–0xd3` range. These are BUCKET extension instructions, not part of the standard 1inch SwapVM opcode
+table and not usable without a deployed `BucketSwapVMRouter`.
+
+### Opcode table
+
+| Opcode | Instruction | Source file | Purpose |
+|--------|-------------|-------------|---------|
+| `0xd0` | `BucketCapabilityGuard` | `contracts/evm/src/vm/BucketCapabilityGuard.sol` | **WHO** — verifies the taker is the intent's operator; the whole capability chain is valid right now (not revoked, not expired, epoch matches, policy version matches); the intent is open, not expired, bound to the current policy version and pointing the right direction |
+| `0xd1` | `BucketQuote` | `contracts/evm/src/vm/BucketQuote.sol` | **PRICE** — Dutch-auction concession from 0 to `maxSlippageBps` over `auctionDuration`; prices the fill in reference-price WAD; enforces rebalance direction (tokenOut overweight, tokenIn underweight); no overshoot past target allocation |
+| `0xd2` | `BucketSpendLimit` | `contracts/evm/src/vm/BucketSpendLimit.sol` | **LIMITS** — enforces every quantitative cap: `maxExecutionValue`, remaining hourly, daily and daily-turnover velocity, intent budget, Aqua virtual balance |
+| `0xd3` | `BucketWalletBalanceCheck` | `contracts/evm/src/vm/BucketWalletBalanceCheck.sol` | **BALANCE** — reads `IERC20(tokenOut).balanceOf(holder)` on-chain (independent of Aqua's virtual balance) and reverts with `BucketInsufficientWalletBalance` before any state changes if the holder's actual wallet cannot supply `amountOut` |
+
+### Canonical program layout
+
+Every Bucket strategy program is the same five-instruction sequence, compiled by `@bucket/vm`:
+
+```
+PC 0  Deadline(strategyExpiry)         0x20  — Aqua-level strategy expiry
+PC 1  Salt(strategyNonce)              0x02  — unique hash per strategy generation
+PC 2  BucketCapabilityGuard(ctrl, id) 0xd0  — WHO
+PC 3  BucketQuote(ctrl, id)           0xd1  — PRICE
+PC 4  BucketSpendLimit(ctrl, id)      0xd2  — LIMITS
+PC 5  BucketWalletBalanceCheck(ctrl)  0xd3  — BALANCE
+```
+
+`BucketController.strategyOrder` announces the canonical order to the router before every fill.
+`@bucket/vm`'s `verifyBucketOrder` checks the announced order byte-for-byte against the canonical program —
+the SDK rejects any fill against a non-canonical order before submitting it.
+
+### Sepolia deployments
+
+| Contract | Address | Etherscan |
+|----------|---------|-----------|
+| `BucketSwapVMRouter` | `0x1B99c7FE80b670d0d689B0887302A4a156009b20` | [sepolia.etherscan.io/address/0x1B99c7FE80b670d0d689B0887302A4a156009b20](https://sepolia.etherscan.io/address/0x1B99c7FE80b670d0d689B0887302A4a156009b20) |
+| `AquaRouter` (unmodified upstream) | `0x219F46B2eC62F36617EA11b8dDC8a83b53261e78` | [sepolia.etherscan.io/address/0x219F46B2eC62F36617EA11b8dDC8a83b53261e78](https://sepolia.etherscan.io/address/0x219F46B2eC62F36617EA11b8dDC8a83b53261e78) |
+| `BucketController` | `0x378a11968905265150CAE36237C2f77665F64bcA` | [sepolia.etherscan.io/address/0x378a11968905265150CAE36237C2f77665F64bcA](https://sepolia.etherscan.io/address/0x378a11968905265150CAE36237C2f77665F64bcA) |
+
+> **Note:** AquaRouter on Sepolia is the unmodified official source (no mainnet deterministic deployment exists for
+> Sepolia); `BucketSwapVMRouter` is deployed on top of it and runs only `BucketOpcodes` — the full upstream SwapVM
+> instruction set is not exposed. Full opcode semantics: [docs/BUCKET_VM.md](docs/BUCKET_VM.md).
+
+### UI execution trace
+
+The BUCKET DEX frontend (`apps/dex`) shows an expandable **"View execution path"** section after every successful
+swap or rebalance. The trace is populated entirely from real execution data — not hardcoded values:
+
+- **BUCKET Policy** — server-side validation of operator, capability, permission, asset mask (maps to 0xd0)
+- **BUCKET SwapVM** — per-opcode pass/fail from server-side policy checks, confirmed by the on-chain `ExecutionRecorded` event
+- **Aqua** — the actual AquaRouter address from the deployment manifest; confirmed by the fill transaction
+- **Actual token transfer** — amounts read from the on-chain `ExecutionRecorded` event (not the pre-trade quote)
+- **Onchain proof** — the real Sepolia transaction hash; links to Etherscan
+
+For blocked executions (over-limit, revoked capability) the trace shows which opcode blocked the action and confirms that no transaction was submitted.
+
+---
+
 ## Sui-native layer
 
 Sui is not a mirror of the EVM Bucket. `contracts/sui` is a complete, independent Financial Capability + settlement
@@ -174,7 +234,8 @@ docs/                          ARCHITECTURE.md · BUCKET_VM.md · SECURITY.md ·
 |---|---|---|
 | ENSv2 | Sepolia | Official deployment (`ensdomains/contracts-v2`, tag `sepolia-deployment-2026-06-29`): RootRegistry `0x11b5…f50c`, ETHRegistry `0x67b7…4b43`, ETHRegistrar `0xa444…5a30`, UserRegistry impl `0x840f…61c0`, VerifiableFactory `0x118b…b70f` |
 | Aqua | Sepolia | **Not officially deployed on Sepolia.** The official deterministic deployment (`0x1111113c…6a90a`) covers mainnets only, so `Deploy.s.sol` deploys the **unmodified** official `AquaRouter` source (pinned commit). Set `AQUA_ADDRESS` to reuse an existing Aqua. |
-| SwapVM | Sepolia | `BucketSwapVMRouter` runs only the Bucket instruction set (`BucketOpcodes`) — deliberately narrower than the official router, which is also not on Sepolia and cannot run custom opcodes anyway. |
+| `BucketSwapVMRouter` | Sepolia | `0x1B99c7FE80b670d0d689B0887302A4a156009b20` — runs only `BucketOpcodes` (0xd0–0xd3 + Deadline + Salt); deliberately narrower than the official upstream router. [Etherscan](https://sepolia.etherscan.io/address/0x1B99c7FE80b670d0d689B0887302A4a156009b20) |
+| `AquaRouter` | Sepolia | `0x219F46B2eC62F36617EA11b8dDC8a83b53261e78` — unmodified official source (no official Sepolia deployment). [Etherscan](https://sepolia.etherscan.io/address/0x219F46B2eC62F36617EA11b8dDC8a83b53261e78) |
 | Sui | testnet | `contracts/sui` published by `pnpm deploy:sui` |
 | Assets | Sepolia | `tUSDC` (6), `tETH` (18), `tSUI` (9), `tPEPE` (18, deliberately never part of a Bucket policy — unapproved-asset rejection demo) test ERC-20s. Reference prices published by an authorized reporter from configuration. |
 
