@@ -1,0 +1,25 @@
+{
+  "name": "bucket",
+  "private": true,
+  "description": "BUCKET: programmable multi-asset financial containers (ENSv2 authority, Sui state, 1inch Aqua + SwapVM execution)",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/** --filter ./vm run build",
+    "typecheck": "pnpm -r run typecheck",
+    "evm:build": "cd contracts/evm && forge build",
+    "sui:build": "node scripts/lib/sui-cli.mjs move build --path contracts/sui",
+    "abi": "pnpm --filter @bucket/scripts run abi",
+    "deploy:evm": "pnpm --filter @bucket/scripts run deploy:evm",
+    "deploy:sui": "pnpm --filter @bucket/scripts run deploy:sui",
+    "configure:ens": "pnpm --filter @bucket/scripts run configure:ens",
+    "demo": "pnpm --filter @bucket/scripts run demo",
+    "web": "pnpm --filter @bucket/web run dev"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
