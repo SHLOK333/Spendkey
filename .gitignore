@@ -14,3 +14,6 @@ contracts/sui/build/
 contracts/evm/out/
 contracts/evm/cache/
 apps/web/dist/
+apps/dex/dist/
+.next/
+*.tsbuildinfo
