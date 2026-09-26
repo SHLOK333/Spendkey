@@ -1,12 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @bucket/dex build",
-  "outputDirectory": "apps/dex/dist",
-  "rewrites": [
-    { "source": "/.well-known/agent-card.json", "destination": "/api/.well-known/agent-card.json" }
-  ],
+  "buildCommand": "pnpm --filter @bucket/dex build && node apps/dex/scripts/build-output.mjs",
   "crons": [
     { "path": "/api/cron/refresh-prices", "schedule": "0 0 * * *" }
   ]

@@ -9,9 +9,7 @@
     "dev": "concurrently -k -n web,api -c green,cyan \"vite\" \"cross-env PORT=3101 tsx watch server/index.ts\"",
     "dev:web": "vite",
     "dev:api": "cross-env PORT=3101 tsx watch server/index.ts",
-    "build": "vite build && node scripts/build-api.mjs",
-    "build:web": "vite build",
-    "build:api": "node scripts/build-api.mjs",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "cross-env NODE_ENV=production PORT=3100 tsx server/index.ts",
     "typecheck": "tsc --noEmit -p ."
