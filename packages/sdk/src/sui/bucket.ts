@@ -1,11 +1,12 @@
 import type { SuiAssetPolicy, SuiBucketState, SuiEvmBinding, SuiPolicy, SuiReceivingPolicy } from '@bucket/protocol-types'
+import { bcs } from '@mysten/sui/bcs'
 import type { ClientWithCoreApi } from '@mysten/sui/client'
 import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc'
 import { Transaction, type TransactionArgument } from '@mysten/sui/transactions'
 import { normalizeSuiAddress } from '@mysten/sui/utils'
 import { bytesToHex, getAddress, hexToBytes, type Address, type Hex } from 'viem'
 
-import { BucketBcs, BytesBcs, OperatorCapBcs, OwnerCapBcs, StringVectorBcs, U16VectorBcs } from './bcs'
+import { BucketBcs, BytesBcs, CapabilityBcs, OperatorCapBcs, OwnerCapBcs, StringVectorBcs, U16VectorBcs } from './bcs'
 
 export const SUI_CLOCK = '0x6'
 
@@ -702,13 +703,131 @@ export class BucketSui {
     return { id: normalizeSuiAddress(raw.id), bucketId: normalizeSuiAddress(raw.bucket_id), capabilityNonce: BigInt(raw.capability_nonce) }
   }
 
-  /** See `SuiDynamicFieldReadNotImplementedError`. */
-  getCapability(_bucketObjectId: string, _nonce: bigint): never {
-    throw new SuiDynamicFieldReadNotImplementedError('read bucket::get_capability via devInspect instead')
+  /** Return values of the first command of `tx`, read with a checks-disabled simulation through the core API (works
+   *  on gRPC, where JSON-RPC `devInspect` is no longer served by public fullnodes). */
+  private async view(tx: Transaction, sender?: string): Promise<Uint8Array[]> {
+    tx.setSenderIfNotSet(sender ?? READ_SENDER)
+    const res = await this.client.core.simulateTransaction({
+      transaction: tx,
+      include: { commandResults: true },
+      checksEnabled: false,
+    })
+    if (res.$kind !== 'Transaction') {
+      throw new Error(`view call aborted: ${JSON.stringify(res.FailedTransaction.status)}`)
+    }
+    const values = res.commandResults?.[0]?.returnValues
+    if (!values || values.length === 0) throw new Error('view call returned no value')
+    return values.map((v) => v.bcs)
   }
 
-  /** See `SuiDynamicFieldReadNotImplementedError`. */
-  vaultBalance(_bucketObjectId: string, _coinType: string): never {
-    throw new SuiDynamicFieldReadNotImplementedError('read bucket::vault_balance<T> via devInspect instead')
+  /** `bucket::vault_balance<T>`: coins of `coinType` held in the Bucket's Move vault. */
+  async vaultBalance(bucketObjectId: string, coinType: string): Promise<bigint> {
+    const tx = new Transaction()
+    tx.moveCall({ target: target(this.packageId, 'bucket', 'vault_balance'), typeArguments: [coinType], arguments: [tx.object(bucketObjectId)] })
+    const [bytes] = await this.view(tx)
+    return BigInt(bcs.u64().parse(bytes!))
   }
+
+  /** `bucket::get_capability`, or `null` when no capability with `nonce` exists. */
+  async getCapability(bucketObjectId: string, nonce: bigint): Promise<SuiCapabilityView | null> {
+    const has = new Transaction()
+    has.moveCall({ target: target(this.packageId, 'bucket', 'has_capability'), arguments: [has.object(bucketObjectId), has.pure.u64(nonce)] })
+    const [exists] = await this.view(has)
+    if (exists?.[0] !== 1) return null
+    const tx = new Transaction()
+    tx.moveCall({ target: target(this.packageId, 'bucket', 'get_capability'), arguments: [tx.object(bucketObjectId), tx.pure.u64(nonce)] })
+    const [bytes] = await this.view(tx)
+    const raw = CapabilityBcs.parse(bytes!)
+    const g = raw.grant
+    return {
+      nonce: BigInt(g.nonce),
+      issuer: normalizeSuiAddress(g.issuer),
+      operator: normalizeSuiAddress(g.operator),
+      operatorName: g.operator_name,
+      depth: g.depth,
+      permissions: g.permissions,
+      assetMask: g.asset_mask,
+      validAfter: BigInt(g.valid_after),
+      validUntil: BigInt(g.valid_until),
+      policyVersion: g.policy_version,
+      epoch: g.epoch,
+      payee: normalizeSuiAddress(g.payee),
+      limits: {
+        maxPerTx: BigInt(g.limits.max_per_tx),
+        maxHourlySpend: BigInt(g.limits.max_hourly_spend),
+        maxDailySpend: BigInt(g.limits.max_daily_spend),
+        maxDailyTurnoverBps: g.limits.max_daily_turnover_bps,
+        maxExecutions: g.limits.max_executions,
+      },
+      status: raw.status,
+      executions: BigInt(raw.executions),
+      usage: {
+        hourWindow: BigInt(raw.usage.hour_window),
+        dayWindow: BigInt(raw.usage.day_window),
+        hourValue: BigInt(raw.usage.hour_value),
+        dayValue: BigInt(raw.usage.day_value),
+      },
+      issuedAtMs: BigInt(raw.issued_at_ms),
+    }
+  }
+
+  /** Every capability ever issued on the Bucket (nonces `1..capabilityNonce`) that still exists. */
+  async listCapabilities(bucketObjectId: string, capabilityNonce: bigint): Promise<SuiCapabilityView[]> {
+    const nonces = Array.from({ length: Number(capabilityNonce) }, (_, i) => BigInt(i + 1))
+    const caps = await Promise.all(nonces.map((n) => this.getCapability(bucketObjectId, n)))
+    return caps.filter((c): c is SuiCapabilityView => c !== null)
+  }
+
+  /** `bucket::has_role` through the core API (owner implication and root fallback applied on-chain). */
+  async hasRole(accessControlId: string, bucketObjectId: string, principal: string, roleBitmap: bigint): Promise<boolean> {
+    const tx = new Transaction()
+    tx.moveCall({
+      target: target(this.packageId, 'bucket', 'has_role'),
+      arguments: [tx.object(accessControlId), tx.object(bucketObjectId), tx.pure.address(principal), tx.pure.u256(roleBitmap)],
+    })
+    const [bytes] = await this.view(tx)
+    return bytes?.[0] === 1
+  }
+
+  /** `bucket::resolve_suins_principal`: the address BUCKET EAC authorizes for a SuiNS name. Throws if the name is
+   *  unregistered, expired or has no target. */
+  async resolveSuinsPrincipal(suinsObjectId: string, name: string): Promise<string> {
+    const tx = new Transaction()
+    tx.moveCall({
+      target: target(this.packageId, 'bucket', 'resolve_suins_principal'),
+      arguments: [tx.object(suinsObjectId), tx.pure.string(name), tx.object(SUI_CLOCK)],
+    })
+    const [bytes] = await this.view(tx)
+    return normalizeSuiAddress(bytesToHex(bytes!))
+  }
+}
+
+export interface SuiCapabilityView {
+  readonly nonce: bigint
+  readonly issuer: string
+  readonly operator: string
+  readonly operatorName: string
+  readonly depth: number
+  readonly permissions: number
+  readonly assetMask: number
+  /** Unix seconds. */
+  readonly validAfter: bigint
+  /** Unix seconds. */
+  readonly validUntil: bigint
+  readonly policyVersion: number
+  readonly epoch: number
+  readonly payee: string
+  readonly limits: {
+    readonly maxPerTx: bigint
+    readonly maxHourlySpend: bigint
+    readonly maxDailySpend: bigint
+    readonly maxDailyTurnoverBps: number
+    readonly maxExecutions: number
+  }
+  /** 1 active, 2 revoked, 3 exhausted (`capability::status_*`). */
+  readonly status: number
+  readonly executions: bigint
+  /** Spend accounting; windows are `clock_ms / 3_600_000` (hour) and `clock_ms / 86_400_000` (day). */
+  readonly usage: { readonly hourWindow: bigint; readonly dayWindow: bigint; readonly hourValue: bigint; readonly dayValue: bigint }
+  readonly issuedAtMs: bigint
 }
