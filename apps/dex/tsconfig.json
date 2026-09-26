@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "incremental": true,
+    "types": ["node", "vite/client"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "server", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
