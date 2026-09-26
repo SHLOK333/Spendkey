@@ -1,0 +1,21 @@
+{
+  "name": "@bucket/protocol-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonical BUCKET protocol model shared by the SDK, VM tooling, scripts and web app",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "viem": "2.56.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
