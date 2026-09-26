@@ -6,25 +6,23 @@ import { DoodleAgent, DoodleShield, DoodleWallet } from '@/components/ui/doodles
 
 export default function Landing() {
   return (
-    <div className="py-12 md:py-16">
-      {/* Hero with full-bleed background video */}
-      <section className="relative overflow-hidden rounded-3xl border border-line">
-        {/* Background video */}
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          src="/intro.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          aria-hidden
-        />
-        {/* Light readability scrim — only darkens top & bottom edges so the video stays vivid */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/45" />
+    <div className="relative isolate min-h-screen py-12 md:py-16">
+      <video
+        className="pointer-events-none fixed inset-0 z-0 h-screen w-screen object-cover"
+        src="/intro.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden
+      />
+      <div className="pointer-events-none fixed inset-0 z-1 bg-black/45" />
 
+      {/* Hero with full-bleed background video */}
+      <section className="relative z-10 min-h-[calc(100vh-7rem)] overflow-hidden rounded-3xl border border-white/10 bg-black/10 md:min-h-[calc(100vh-8rem)]">
         {/* Content on top of the video */}
-        <div className="relative z-10 mx-auto flex min-h-[68vh] max-w-3xl flex-col items-center justify-center px-6 py-20 text-center">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-7rem)] max-w-3xl flex-col items-center justify-center px-6 py-20 text-center md:min-h-[calc(100vh-8rem)]">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Self-custodial · 1inch Aqua + SwapVM · ENSv2
           </span>
@@ -50,7 +48,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <div className="mx-auto mt-16 grid max-w-4xl gap-4 text-left md:grid-cols-3">
+      <div className="relative z-10 mx-auto mt-16 grid max-w-4xl gap-4 text-left md:grid-cols-3">
         {[
           { art: <DoodleWallet width={76} height={76} />, title: 'Your wallet owns the money.', body: 'Assets never move into BUCKET. Revoke your wallet approval and nothing can execute.' },
           { art: <DoodleAgent width={76} height={76} />, title: 'Your Bucket defines what an operator can do.', body: 'Which assets, how much per trade, how much per day, until when — and who.' },
