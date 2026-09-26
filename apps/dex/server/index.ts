@@ -1,21 +1,20 @@
-import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { decodeBucketError } from '@bucket/sdk'
-import { serve } from '@hono/node-server'
-import { serveStatic } from '@hono/node-server/serve-static'
 import { config as loadEnv } from 'dotenv'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { formatEther } from 'viem'
 import { z } from 'zod'
 
 const repoRoot = path.resolve(process.cwd(), '../..')
 
-// Server-only secrets (RPC URL, agent operator keys, optional OpenAI key) live in the repository's root `.env`.
-// Nothing here is ever exposed to the browser: the SPA only receives what these handlers choose to return.
-loadEnv({ path: path.join(repoRoot, '.env'), quiet: true })
+// On Vercel (serverless) secrets come from the project's Environment Variables; locally they live in the
+// repository's root `.env`. Nothing here is ever exposed to the browser: the SPA only receives what these
+// handlers choose to return.
+if (!process.env.VERCEL) loadEnv({ path: path.join(repoRoot, '.env'), quiet: true })
 
+const { loadDeployment } = await import('../src/lib/server/deployment')
 const { AgentActionSchema, ApprovalSchema } = await import('../src/lib/agent/schema')
 const { explainError } = await import('../src/lib/errors')
 const { BlockedError, agentIdentities, executeAction, validateAction, verifyApproval } = await import('../src/lib/server/agent')
@@ -35,10 +34,7 @@ const app = new Hono()
 app.onError((err, c) => c.json({ error: redactRpc(err instanceof Error ? err.message : String(err)) }, 500))
 
 // --- Public deployment manifest (the single source of contract addresses; no secrets) -----------------------
-app.get('/api/deployment', (c) => {
-  const raw = readFileSync(path.join(repoRoot, 'deployments', 'sepolia.json'), 'utf8')
-  return new Response(raw, { headers: { 'content-type': 'application/json' } })
-})
+app.get('/api/deployment', (c) => c.json(loadDeployment()))
 
 // --- Onboarding: agent operator identity a new owner grants to (public; no secrets) ------------------------
 app.get('/api/onboard/config', (c) => c.json(onboardConfig()))
@@ -313,7 +309,9 @@ app.get('/api/agent/card', async (c) => {
 })
 
 // A2A well-known location: serves the primary (first manifest) Bucket agent's card for auto-discovery.
-app.get('/.well-known/agent-card.json', async (c) => {
+// Registered on the public path (served directly by the Node server) and on an `/api/`-prefixed alias that a
+// Vercel rewrite maps `/.well-known/agent-card.json` onto (Vercel functions only receive `/api/*`).
+const agentCardHandler = async (c: Context) => {
   const origin = originOf(c.req.url)
   try {
     const cards = await buildAgentCards(origin)
@@ -322,18 +320,31 @@ app.get('/.well-known/agent-card.json', async (c) => {
   } catch (error) {
     return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 500)
   }
-})
-
-// --- Static SPA (production only; in dev Vite serves the client and proxies /api here) ---------------------
-if (process.env.NODE_ENV === 'production') {
-  app.use('/*', serveStatic({ root: './dist' }))
-  app.get('/*', serveStatic({ path: './dist/index.html' }))
 }
+app.get('/.well-known/agent-card.json', agentCardHandler)
+app.get('/api/.well-known/agent-card.json', agentCardHandler)
 
-const port = Number(process.env.PORT ?? 3101)
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`[BUCKET] API server listening on http://localhost:${info.port}`)
-})
+// The Hono app is exported so a serverless adapter (see `api/[[...route]].ts` on Vercel) can serve it. The
+// Node-only bootstrap below runs for `pnpm dev` / `pnpm start`, never on Vercel (which serves the SPA itself
+// and invokes the exported app per request).
+export { app }
 
-// Keep the on-chain reference price feed fresh so demo swaps never fail with BucketMathPriceStale.
-void register().catch((e: unknown) => console.warn('[BUCKET] price refresh setup failed:', e instanceof Error ? e.message : String(e)))
+if (!process.env.VERCEL) {
+  const { serve } = await import('@hono/node-server')
+  const { serveStatic } = await import('@hono/node-server/serve-static')
+
+  // --- Static SPA (production only; in dev Vite serves the client and proxies /api here) -------------------
+  if (process.env.NODE_ENV === 'production') {
+    app.use('/*', serveStatic({ root: './dist' }))
+    app.get('/*', serveStatic({ path: './dist/index.html' }))
+  }
+
+  const port = Number(process.env.PORT ?? 3101)
+  serve({ fetch: app.fetch, port }, (info) => {
+    console.log(`[BUCKET] API server listening on http://localhost:${info.port}`)
+  })
+
+  // Keep the on-chain reference price feed fresh so demo swaps never fail with BucketMathPriceStale.
+  // (Serverless functions can't hold a background interval; on Vercel use a Cron Job instead — see vercel.json.)
+  void register().catch((e: unknown) => console.warn('[BUCKET] price refresh setup failed:', e instanceof Error ? e.message : String(e)))
+}
