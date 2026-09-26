@@ -8,6 +8,7 @@ import Onboard from '@/app/onboard/page'
 import Landing from '@/app/page'
 import Pay from '@/app/pay/page'
 import Portfolio from '@/app/portfolio/page'
+import Rale from '@/app/rale/page'
 import Trade from '@/app/trade/page'
 import { Nav } from '@/components/nav'
 
@@ -39,6 +40,7 @@ export function App() {
         <Route path="buckets/new" element={<NewBucketPermission />} />
         <Route path="portfolio" element={<Portfolio />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="rale" element={<Rale />} />
       </Route>
     </Routes>
   )
