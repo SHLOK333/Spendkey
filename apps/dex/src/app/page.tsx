@@ -20,9 +20,8 @@ export default function Landing() {
           preload="auto"
           aria-hidden
         />
-        {/* Readability overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-bg/70 via-bg/55 to-bg/85" />
-        <div className="pointer-events-none absolute inset-0 bg-black/25" />
+        {/* Light readability scrim — only darkens top & bottom edges so the video stays vivid */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/45" />
 
         {/* Content on top of the video */}
         <div className="relative z-10 mx-auto flex min-h-[68vh] max-w-3xl flex-col items-center justify-center px-6 py-20 text-center">
