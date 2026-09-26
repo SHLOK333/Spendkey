@@ -1,6 +1,5 @@
 /**
- * Chain-neutral Financial Capability permission bits, identical to the EVM `BucketPermissions` and the Sui
- * `bucket::permissions` module.
+ * Financial Capability permission bits, identical to the EVM `BucketPermissions` module.
  *
  * Delegable permissions describe execution an operator may perform over the holder's/owner's wallet liquidity.
  * Owner-only permissions describe authority over the Bucket itself and are never granted to a capability.

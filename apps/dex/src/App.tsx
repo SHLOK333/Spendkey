@@ -20,7 +20,7 @@ function Shell() {
       </main>
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 pb-10 pt-4 text-xs text-faint md:px-8">
         <span>BUCKET · self-custodial capability protocol</span>
-        <span>ENSv2 on EVM · SuiNS on Sui · testnets only</span>
+        <span>ENSv2 on EVM · Sepolia testnet only</span>
       </footer>
     </>
   )

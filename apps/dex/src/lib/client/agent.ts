@@ -1,4 +1,3 @@
-import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSyncExternalStore } from 'react'
 import { keccak256, toBytes } from 'viem'
@@ -44,7 +43,7 @@ export function useSessionVersion(): number {
 }
 
 export function targetOf(action: AgentAction): string {
-  return action.action === 'sui_pay' ? action.bucketObjectId : action.bucketId
+  return action.bucketId
 }
 
 function readSession(key: string): Approval | null {
@@ -101,16 +100,9 @@ export async function validateAction(action: AgentAction): Promise<ValidationRes
 export function useActionRunner() {
   const { address } = useConnection()
   const { signMessageAsync } = useSignMessage()
-  const dAppKit = useDAppKit()
-  const suiAccount = useCurrentAccount()
   const queryClient = useQueryClient()
 
-  async function sign(network: 'sepolia' | 'sui', message: string): Promise<{ signature: string; signer: string }> {
-    if (network === 'sui') {
-      if (!suiAccount) throw new Error('Connect the Sui wallet that owns this Bucket')
-      const signed = await dAppKit.signPersonalMessage({ message: new TextEncoder().encode(message) })
-      return { signature: signed.signature, signer: suiAccount.address }
-    }
+  async function sign(message: string): Promise<{ signature: string; signer: string }> {
     if (!address) throw new Error('Connect the wallet that owns this Bucket')
     return { signature: await signMessageAsync({ message }), signer: address }
   }
@@ -119,14 +111,14 @@ export function useActionRunner() {
   async function approveAction(action: AgentAction): Promise<Approval> {
     const expires = Math.floor(Date.now() / 1000) + 300
     const message = approvalMessage({ scope: 'action', target: targetOf(action), actionHash: keccak256(toBytes(canonicalAction(action))), expires })
-    const { signature, signer } = await sign(action.network, message)
+    const { signature, signer } = await sign(message)
     return { scope: 'action', expires, signature, signer }
   }
 
   /** Owner approval of a time-boxed autonomous session; the chain still bounds every execution. */
-  async function startSession(network: 'sepolia' | 'sui', target: string, minutes: number): Promise<Approval> {
+  async function startSession(target: string, minutes: number): Promise<Approval> {
     const expires = Math.floor(Date.now() / 1000) + minutes * 60
-    const { signature, signer } = await sign(network, approvalMessage({ scope: 'session', target, expires }))
+    const { signature, signer } = await sign(approvalMessage({ scope: 'session', target, expires }))
     const approval: Approval = { scope: 'session', expires, signature, signer }
     window.sessionStorage.setItem(SESSION_KEY(target), JSON.stringify(approval))
     bumpSession()
@@ -150,7 +142,7 @@ export function useActionRunner() {
 
   /** The session currently applicable to an action for the connected owner (all-Buckets session preferred). */
   function currentSession(action: AgentAction): Approval | null {
-    return sessionFor(action, action.network === 'sui' ? suiAccount?.address : address)
+    return sessionFor(action, address)
   }
 
   async function execute(action: AgentAction, approval: Approval): Promise<ExecuteResponse> {

@@ -34,12 +34,6 @@ export const AgentActionSchema = z.discriminatedUnion('action', [
     symbol: z.string().min(1),
     amount: decimal,
   }),
-  z.object({
-    action: z.literal('sui_pay'),
-    network: z.literal('sui'),
-    bucketObjectId: z.string().regex(/^0x[0-9a-fA-F]{1,64}$/),
-    amount: decimal,
-  }),
 ])
 export type AgentAction = z.infer<typeof AgentActionSchema>
 
@@ -77,11 +71,11 @@ export interface ValidationResult {
 }
 
 export interface ExecutionResult {
-  readonly network: 'sepolia' | 'sui'
-  readonly kind: 'swap' | 'rebalance' | 'pay' | 'sui_pay'
+  readonly network: 'sepolia'
+  readonly kind: 'swap' | 'rebalance' | 'pay'
   /** Every transaction submitted, in order (e.g. open intent, then fill). */
   readonly transactions: Array<{ label: string; hash: string; url: string }>
-  /** Executed amounts read from the on-chain receipt / Move effects — never the pre-trade quote. */
+  /** Executed amounts read from the on-chain receipt — never the pre-trade quote. */
   readonly actual: {
     readonly sold: { symbol: string; amount: string } | null
     readonly bought: { symbol: string; amount: string } | null
@@ -110,7 +104,7 @@ export const ApprovalSchema = z.object({
   scope: z.enum(['action', 'session', 'session-all']),
   expires: z.number().int(),
   signature: z.string().min(1),
-  /** Signer address (EVM) or Sui address. */
+  /** Signer address (EVM). */
   signer: z.string().min(1),
 })
 export type Approval = z.infer<typeof ApprovalSchema>

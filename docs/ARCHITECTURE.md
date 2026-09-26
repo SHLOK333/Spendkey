@@ -1,25 +1,20 @@
 # Architecture
 
-## Two independent stacks, one shared concept
+## The Financial Capability model
 
-BUCKET is not one contract shared across chains. It is the same **Financial Capability** concept — scoped,
-revocable, hierarchical, non-escalating, limited — implemented and enforced natively on each chain:
+BUCKET implements the **Financial Capability** concept — scoped, revocable, hierarchical, non-escalating, limited —
+on the EVM execution layer:
 
-| | EVM execution layer | Sui-native layer |
-|---|---|---|
-| Identity | ENSv2 (Sepolia) | SuiNS name, resolved **on-chain** to an address (`bucket::access`) |
-| Authorization | `BucketCapabilities` | `bucket::access` (resource-scoped roles) **+** `bucket::capability` |
-| Custody | The owner's own wallet (`holder`); no vault contract | The Bucket object's own vault (`Bag` of `Balance<T>`) |
-| Execution | SwapVM (`0xd0`-`0xd3`) + 1inch Aqua | Native Move `pay` / `pay_many` / `pay_bucket_to_bucket` |
-| Cross-chain link | none required | optional `EvmBinding`, attribution only |
-
-Never assume the EVM and Sui representations of "a Bucket" share enforcement. A capability issued on one chain has
-no effect on the other; an `EvmBinding` lets a UI show one execution history, nothing more.
+| | EVM execution layer |
+|---|---|
+| Identity | ENSv2 (Sepolia) |
+| Authorization | `BucketCapabilities` |
+| Custody | The owner's own wallet (`holder`); no vault contract |
+| Execution | SwapVM (`0xd0`-`0xd3`) + 1inch Aqua |
 
 ## The Financial Capability, precisely
 
-A capability is immutable once issued. Its fields, identical in spirit on both chains (EVM `Capability` /
-`CapabilityLimits`; Sui `capability::Capability` / `Limits`):
+A capability is immutable once issued. Its fields (EVM `Capability` / `CapabilityLimits`):
 
 ```
 bucketId, parentId, issuer, operator, depth

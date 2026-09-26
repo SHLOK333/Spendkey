@@ -1,6 +1,5 @@
 /**
- * Protocol constants. Every value here is mirrored exactly by the EVM `BucketTypes.sol` / `BucketPermissions.sol`
- * and, where a Sui-native equivalent exists, by the Sui `bucket::policy` / `bucket::capability` modules.
+ * Protocol constants. Every value here is mirrored exactly by the EVM `BucketTypes.sol` / `BucketPermissions.sol`.
  */
 
 /** Maximum number of assets a Bucket may hold (bounds the `u8` asset mask). */
@@ -34,7 +33,7 @@ export const MAX_DELEGATION_DEPTH = 3
 /** Maximum lifetime of a capability, seconds (365 days). */
 export const MAX_CAPABILITY_DURATION = 365 * DAY
 
-/** Execution venue flags carried in `PolicyParams.venueMask` / `Capability.venueMask` (EVM only; Sui has none). */
+/** Execution venue flags carried in `PolicyParams.venueMask` / `Capability.venueMask`. */
 export const Venue = {
   AquaSwapVM: 1,
 } as const
@@ -47,7 +46,7 @@ export const INTENT_ID_DOMAIN_TAG = 'BUCKET_INTENT_V1'
 export const CAPABILITY_ID_DOMAIN_TAG = 'BUCKET_CAPABILITY_ID_V1'
 export const CAPABILITY_HASH_DOMAIN_TAG = 'BUCKET_CAPABILITY_V1'
 
-/** Bucket lifecycle, identical numbering on the EVM (`BucketStatus`) and on Sui (`STATUS_*`). */
+/** Bucket lifecycle status, matching the EVM `BucketStatus`. */
 export const BucketStatus = {
   None: 0,
   Active: 1,

@@ -81,7 +81,7 @@ export interface BucketMeta {
   readonly usage: Usage
 }
 
-/** Cumulative spend usage in fixed hour/day windows (EVM `Usage`, Sui `capability::Usage`). */
+/** Cumulative spend usage in fixed hour/day windows (EVM `Usage`). */
 export interface Usage {
   readonly hourWindow: number
   readonly dayWindow: number
@@ -209,94 +209,4 @@ export interface ExecutionReceipt {
   readonly preStateHash: Hex
   readonly postStateHash: Hex
   readonly timestamp: number
-}
-
-// ============================================================================================ Sui-native
-
-/** Sui-native asset policy entry (`bucket::policy::AssetPolicy`): a Move coin type and its target weight. */
-export interface SuiAssetPolicy {
-  /** Fully qualified Move coin type, e.g. `0x2::sui::SUI`. */
-  readonly coinType: string
-  readonly targetBps: number
-}
-
-/** Sui-native Bucket policy (`bucket::policy::Policy`): a payment/settlement policy, no price feed involved. */
-export interface SuiPolicy {
-  readonly version: number
-  readonly maxPerTx: bigint
-  readonly maxHourlySpend: bigint
-  readonly maxDailySpend: bigint
-  readonly maxDailyTurnoverBps: number
-  readonly delegablePermissions: number
-  readonly assets: readonly SuiAssetPolicy[]
-}
-
-/** Sui-native capability limits (`bucket::capability::Limits`). */
-export interface SuiCapabilityLimits {
-  readonly maxPerTx: bigint
-  readonly maxHourlySpend: bigint
-  readonly maxDailySpend: bigint
-  readonly maxDailyTurnoverBps: number
-  readonly maxExecutions: number
-}
-
-/** Sui-native capability (`bucket::capability::Capability`), decoded from its BCS-encoded `Grant` + live state. */
-export interface SuiCapability {
-  readonly capabilityId: Hex
-  readonly parentId: Hex
-  readonly issuer: string
-  readonly operator: string
-  readonly operatorName: string
-  readonly depth: number
-  readonly permissions: number
-  readonly assetMask: number
-  readonly validAfter: number
-  readonly validUntil: number
-  readonly policyVersion: number
-  readonly epoch: number
-  readonly nonce: bigint
-  readonly payee: string
-  readonly limits: SuiCapabilityLimits
-  readonly status: CapabilityStatus
-  readonly executions: bigint
-  readonly usage: Usage
-  readonly capabilityHash: Hex
-  readonly issuedAtMs: bigint
-}
-
-/** Optional, attribution-only association with an independently governed EVM twin (`bucket::bucket::EvmBinding`). */
-export interface SuiEvmBinding {
-  readonly chainId: number
-  readonly controller: Address
-  readonly bucketId: Hex
-  readonly holder: Address
-}
-
-/** A receiving Bucket's inbound-payment policy (`bucket::bucket::ReceivingPolicy`). */
-export interface SuiReceivingPolicy {
-  readonly acceptedSenders: readonly string[] | null
-  readonly minAmount: bigint
-  readonly maxAmount: bigint
-}
-
-/** Decoded state of the Sui-native `Bucket` object. */
-export interface SuiBucketState {
-  readonly objectId: string
-  readonly name: string
-  readonly owner: string
-  readonly evm: SuiEvmBinding | null
-  readonly policy: SuiPolicy
-  readonly policyHash: Hex
-  readonly capabilityEpoch: number
-  readonly capabilityNonce: bigint
-  readonly usage: Usage
-  readonly guardians: readonly string[]
-  readonly receivingPolicy: SuiReceivingPolicy | null
-  readonly evmExecutionNonce: bigint
-  readonly evmReceiptsRecorded: bigint
-  readonly lastEvmTx: Hex | null
-  readonly status: BucketStatus
-  readonly version: bigint
-  readonly createdAtMs: bigint
-  readonly updatedAtMs: bigint
 }

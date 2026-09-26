@@ -1,5 +1,4 @@
 import { formatUsd } from '@bucket/protocol-types'
-import { useCurrentAccount } from '@mysten/dapp-kit-react'
 import { Link } from 'react-router-dom'
 import { isAddressEqual } from 'viem'
 
@@ -8,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { PageHero, TableRow, TableShell, TokenGlyph } from '@/components/ui/data-table'
 import { DoodleEmpty, DoodleWallet } from '@/components/ui/doodles'
 import { EmptyState, Skeleton } from '@/components/ui/primitives'
-import { useApp, useOwnerWallet } from '@/lib/client/app'
-import { useCapabilities, useKnownBuckets, useSuiBalance, useSuiBucket, useWalletAssets } from '@/lib/client/queries'
+import { useOwnerWallet } from '@/lib/client/app'
+import { useCapabilities, useKnownBuckets, useWalletAssets } from '@/lib/client/queries'
 import { tokenAmount } from '@/lib/utils'
 
 function EvmPortfolio() {
@@ -103,59 +102,6 @@ function EvmPortfolio() {
   )
 }
 
-function SuiPortfolio() {
-  const { deployment } = useApp()
-  const account = useCurrentAccount()
-  const balance = useSuiBalance(account?.address ?? null)
-  const sb = deployment.suiBuckets[0]
-  const bucket = useSuiBucket(sb?.objectId ?? null)
-  const live = (bucket.data?.capabilities ?? []).filter((c) => c.status === 1 && Number(c.validUntil) * 1000 > Date.now())
-  const rows = [
-    { symbol: 'SUI', label: 'Wallet SUI', value: account ? (balance.data !== undefined ? tokenAmount(balance.data, 9, 4) : '…') : 'Connect wallet', note: 'In your wallet' },
-    { symbol: 'SUI', label: 'Bucket vault', value: bucket.data ? tokenAmount(bucket.data.vaultSui, 9, 4) : '…', note: 'Move vault — only your OwnerCap can withdraw' },
-  ]
-  return (
-    <div className="space-y-8">
-      <PageHero
-        title="Portfolio"
-        subtitle="Your SUI stays with you. The Bucket vault is a Move object only your OwnerCap can withdraw."
-        art={<DoodleWallet width={132} height={132} />}
-        stats={[
-          { label: 'Buckets', value: String(deployment.suiBuckets.length) },
-          { label: 'Active agents', value: String(new Set(live.filter((c) => c.hasRolePay).map((c) => c.operator)).size) },
-        ]}
-      />
-      <TableShell>
-        {rows.map((r) => (
-          <TableRow
-            key={r.label}
-            chevron={false}
-            leading={
-              <div className="flex items-center gap-3">
-                <TokenGlyph symbol={r.symbol} />
-                <div>
-                  <div className="font-semibold text-fg">{r.label}</div>
-                  <div className="text-xs text-muted">{r.note}</div>
-                </div>
-              </div>
-            }
-            cells={[{ label: 'Amount', value: <span className="text-fg">{r.value} SUI</span> }]}
-          />
-        ))}
-      </TableShell>
-      <div className="flex gap-3">
-        <Button asChild variant="primary">
-          <Link to="/pay">Pay</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link to="/buckets/new">Delegate</Link>
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 export default function PortfolioPage() {
-  const { network } = useApp()
-  return <div className="mx-auto max-w-5xl">{network === 'sui' ? <SuiPortfolio /> : <EvmPortfolio />}</div>
+  return <div className="mx-auto max-w-5xl"><EvmPortfolio /></div>
 }

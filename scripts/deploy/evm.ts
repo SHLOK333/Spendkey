@@ -90,17 +90,15 @@ async function main(): Promise<void> {
         bucketRegistry: previous?.evm.ens.bucketRegistry ?? null,
       },
       tokens: [
-        { symbol: 'USDC', address: addr(out.tUSDC), decimals: 6, suiType: '' },
-        { symbol: 'ETH', address: addr(out.tETH), decimals: 18, suiType: '' },
-        { symbol: 'SUI', address: addr(out.tSUI), decimals: 9, suiType: '0x2::sui::SUI' },
+        { symbol: 'USDC', address: addr(out.tUSDC), decimals: 6 },
+        { symbol: 'ETH', address: addr(out.tETH), decimals: 18 },
+        { symbol: 'SUI', address: addr(out.tSUI), decimals: 9 },
         // Deliberately never part of a Bucket policy (unapproved-asset rejection scenarios).
-        { symbol: 'PEPE', address: addr(out.tPEPE), decimals: 18, suiType: '' },
+        { symbol: 'PEPE', address: addr(out.tPEPE), decimals: 18 },
       ],
     },
-    sui: previous?.sui ?? null,
     ens: previous?.ens ?? null,
     buckets: previous?.buckets ?? [],
-    suiBuckets: previous?.suiBuckets ?? [],
   }
   writeManifest(deployment)
 

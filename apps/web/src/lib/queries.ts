@@ -80,17 +80,6 @@ export function useIsCapabilityOperator(capabilityId: Hex | undefined, account: 
   return capability.data && account ? capability.data.operator.toLowerCase() === account.toLowerCase() : false
 }
 
-/** Reads a Sui-native Bucket by object id; read-only, no wallet required. */
-export function useSuiBucket(objectId: string | undefined) {
-  const { clients } = useApp()
-  return useQuery({
-    queryKey: ['sui-bucket', objectId],
-    enabled: Boolean(objectId && clients.suiReader),
-    refetchInterval: REFRESH_MS,
-    queryFn: () => clients.suiReader!.getBucket(objectId as string),
-  })
-}
-
 export function useExecutions(bucketId: Hex | undefined) {
   const { clients } = useApp()
   return useQuery({

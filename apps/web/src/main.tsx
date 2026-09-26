@@ -1,5 +1,3 @@
-import { createDAppKit, DAppKitProvider } from '@mysten/dapp-kit-react'
-import { SuiGrpcClient } from '@mysten/sui/grpc'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -37,33 +35,22 @@ function Routes() {
 function Footer() {
   return (
     <footer className="footer">
-      <span>ENSv2 = authority · Sui = Bucket state · Aqua = shared liquidity · SwapVM = programmable execution</span>
+      <span>ENSv2 = authority · Aqua = shared liquidity · SwapVM = programmable execution</span>
       <span>Powered by SwapVM — © Degensoft Ltd 2025</span>
     </footer>
   )
 }
 
 function App({ config }: { config: AppConfig }) {
-  const [dAppKit] = useState(() => {
-    const sui = config.deployment.sui
-    const network = sui?.network ?? 'testnet'
-    return createDAppKit({
-      networks: [network],
-      defaultNetwork: network,
-      createClient: () => new SuiGrpcClient({ network, baseUrl: config.suiGrpcUrl ?? `https://fullnode.${network}.sui.io:443` }),
-    })
-  })
   return (
     <QueryClientProvider client={queryClient}>
-      <DAppKitProvider dAppKit={dAppKit}>
-        <AppProvider config={config}>
-          <Header />
-          <ErrorBoundary>
-            <Routes />
-          </ErrorBoundary>
-          <Footer />
-        </AppProvider>
-      </DAppKitProvider>
+      <AppProvider config={config}>
+        <Header />
+        <ErrorBoundary>
+          <Routes />
+        </ErrorBoundary>
+        <Footer />
+      </AppProvider>
     </QueryClientProvider>
   )
 }

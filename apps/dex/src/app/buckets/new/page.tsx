@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, EmptyState, Identity, Input, Label, Spinner } from '@/components/ui/primitives'
 import { useApp, useOwnerWallet } from '@/lib/client/app'
 import { useSelectedBucket } from '@/lib/client/bucket-selection'
-import { useAgentStatus, useBucketView, useSuiBucket } from '@/lib/client/queries'
-import { useSuiOwner } from '@/lib/client/sui'
+import { useAgentStatus, useBucketView } from '@/lib/client/queries'
 import { cn, dateLabel, shortAddr } from '@/lib/utils'
 
 type Purpose = 'trading' | 'payments' | 'treasury'
@@ -336,207 +335,7 @@ function EvmWizard({ initial }: { initial: Purpose | null }) {
   )
 }
 
-// =================================================================================================== Sui
-
-function SuiWizard() {
-  const { deployment, suiReader } = useApp()
-  const owner = useSuiOwner()
-  const sb = deployment.suiBuckets[0]
-  const data = useSuiBucket(sb?.objectId ?? null)
-  const qc = useQueryClient()
-  const [step, setStep] = useState(0)
-  const [who, setWho] = useState('bucketprotocol.sui')
-  const [payeeInput, setPayeeInput] = useState('')
-  const [perPayment, setPerPayment] = useState('0.1')
-  const [perDay, setPerDay] = useState('0.5')
-  const [days, setDays] = useState('7')
-  const [confirm, setConfirm] = useState(false)
-  const [done, setDone] = useState(false)
-
-  const resolve = async (input: string): Promise<{ address: string; name: string | null }> => {
-    if (/^0x[0-9a-fA-F]{1,64}$/.test(input)) return { address: input, name: null }
-    if (!input.endsWith('.sui')) throw new Error('Enter a Sui address or a SuiNS name (…sui)')
-    if (!suiReader || !deployment.sui?.suinsObjectId) throw new Error('SuiNS not configured')
-    return { address: await suiReader.resolveSuinsPrincipal(deployment.sui.suinsObjectId, input), name: input }
-  }
-  const operator = useQuery({ queryKey: ['suins', who], enabled: step >= 1 && who.length > 3, retry: false, queryFn: () => resolve(who) })
-  const payee = useQuery({ queryKey: ['suins-payee', payeeInput], enabled: step >= 2 && payeeInput.length > 3, retry: false, queryFn: () => resolve(payeeInput) })
-
-  if (!sb || !deployment.sui) return <EmptyState title="No Sui Bucket in this deployment" />
-  if (!owner.address) return <EmptyState title="Connect the owner's Sui wallet">Only the Bucket owner (holder of its OwnerCap) can grant permissions.</EmptyState>
-  if (data.data && data.data.state.owner !== owner.address) return <EmptyState title="This Sui wallet does not own the Bucket">Connect the wallet that holds its OwnerCap.</EmptyState>
-
-  const now = Math.floor(Date.now() / 1000)
-  const validUntil = now + Math.round(Number(days) * 86_400)
-  const mist = (s: string) => {
-    try {
-      return parseUnits(s, 9)
-    } catch {
-      return 0n
-    }
-  }
-  const limitOk = mist(perPayment) > 0n && mist(perPayment) <= mist(perDay)
-  if (done) {
-    return (
-      <Card className="p-6">
-        <div className="text-lg font-semibold text-accent">Permission granted on Sui</div>
-        <div className="mt-2 text-sm text-muted">{who} can now pay the fixed payee within these limits.</div>
-        <div className="mt-5 flex gap-3">
-          <Button asChild variant="primary">
-            <Link to="/buckets">View Buckets</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/pay">Make a payment</Link>
-          </Button>
-        </div>
-      </Card>
-    )
-  }
-  return (
-    <Card className="p-6">
-      <Steps step={step} />
-      {step === 0 ? (
-        <div>
-          <div className="mb-4 text-lg font-semibold">What should this permission do?</div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <PurposeCard icon={<LineChart className="h-5 w-5" />} title="Trading" body="Swaps via Aqua + SwapVM." disabled note="EVM only — the Sui implementation does not route swaps." onClick={() => undefined} />
-            <PurposeCard icon={<CreditCard className="h-5 w-5" />} title="Payments" body="Pay one fixed recipient from the Bucket vault, within limits." onClick={() => setStep(1)} />
-            <PurposeCard icon={<Landmark className="h-5 w-5" />} title="Treasury" body="Multi-recipient treasury management." disabled note="Not exposed in this app." onClick={() => undefined} />
-          </div>
-        </div>
-      ) : null}
-      {step === 1 ? (
-        <div className="space-y-4">
-          <div className="text-lg font-semibold">Who is the operator?</div>
-          <div>
-            <Label hint="SuiNS name or address">Operator</Label>
-            <Input value={who} onChange={(e) => setWho(e.target.value.trim())} />
-          </div>
-          <div className="rounded-xl bg-panel-2 p-4 text-sm">
-            {operator.isFetching ? (
-              <span className="inline-flex items-center gap-2 text-muted">
-                <Spinner /> Resolving through BUCKET&apos;s on-chain SuiNS lookup…
-              </span>
-            ) : operator.error ? (
-              <span className="text-danger">{operator.error instanceof Error ? operator.error.message : 'Name could not be resolved'}</span>
-            ) : operator.data ? (
-              <div>
-                <div className="text-xs text-muted">Resolves to (the address that will hold authority)</div>
-                <Identity name={operator.data.name} address={operator.data.address} />
-              </div>
-            ) : null}
-          </div>
-          <p className="text-xs text-muted">SuiNS says who. BUCKET EAC grants ROLE_PAY to the resolved address. Move enforces it on every payment.</p>
-          <div className="flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(0)}>
-              Back
-            </Button>
-            <Button variant="primary" disabled={!operator.data || operator.data.address === owner.address} onClick={() => setStep(2)}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      {step === 2 ? (
-        <div className="space-y-4">
-          <div className="text-lg font-semibold">Limits</div>
-          <div>
-            <Label hint="SuiNS name or address">Fixed payee</Label>
-            <Input value={payeeInput} onChange={(e) => setPayeeInput(e.target.value.trim())} placeholder="merchant.sui or 0x…" />
-            {payee.data ? <div className="mt-1 font-mono text-xs text-muted">{payee.data.address}</div> : payee.error ? <div className="mt-1 text-xs text-danger">Could not resolve</div> : null}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <Label hint="SUI">Max per payment</Label>
-              <Input value={perPayment} onChange={(e) => setPerPayment(e.target.value)} />
-            </div>
-            <div>
-              <Label hint="SUI">Max per day</Label>
-              <Input value={perDay} onChange={(e) => setPerDay(e.target.value)} />
-            </div>
-            <div>
-              <Label hint={dateLabel(validUntil)}>Expires in (days)</Label>
-              <Input value={days} onChange={(e) => setDays(e.target.value)} />
-            </div>
-          </div>
-          {!limitOk ? <div className="text-sm text-warn">Per payment must be positive and ≤ per day.</div> : null}
-          <div className="flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button variant="primary" disabled={!payee.data || !limitOk} onClick={() => setStep(3)}>
-              Review
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      {step === 3 && operator.data && payee.data ? (
-        <div className="space-y-4">
-          <Review
-            who={operator.data.name ?? shortAddr(operator.data.address)}
-            whoAddress={operator.data.address}
-            what={`Pay SUI → ${payee.data.name ?? shortAddr(payee.data.address)} only`}
-            limit={`${perPayment} SUI / payment`}
-            velocity={`${perDay} SUI / day`}
-            expiry={dateLabel(validUntil)}
-            custody="Payments draw from the Bucket's Move vault; only your OwnerCap can withdraw it."
-          />
-          <div className="flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(2)}>
-              Back
-            </Button>
-            <Button variant="primary" onClick={() => setConfirm(true)}>
-              Confirm Permission
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      <ConfirmTx
-        open={confirm}
-        onOpenChange={setConfirm}
-        title="Grant this permission?"
-        confirmLabel="Sign & grant (2 transactions)"
-        run={async () => {
-          if (!owner.client || !operator.data || !payee.data || !deployment.sui?.accessControlId || !deployment.sui.suinsObjectId) throw new Error('Not ready')
-          const sui = deployment.sui
-          const url = (d: string) => `${sui.explorer ?? 'https://suiscan.xyz/testnet'}/tx/${d}`
-          const role = operator.data.name
-            ? await owner.client.ownerGrantRolesBySuins({ packageId: sui.packageId, accessControlId: sui.accessControlId!, bucketObjectId: sb.objectId, ownerCapId: sb.ownerCapId, suinsObjectId: sui.suinsObjectId!, name: operator.data.name, roleBitmap: 0x10n })
-            : await owner.client.ownerGrantRoles({ packageId: sui.packageId, accessControlId: sui.accessControlId!, bucketObjectId: sb.objectId, ownerCapId: sb.ownerCapId, roleBitmap: 0x10n, principal: operator.data.address })
-          const cap = await owner.client.issueCapability({
-            packageId: sui.packageId,
-            bucketObjectId: sb.objectId,
-            ownerCapId: sb.ownerCapId,
-            grant: {
-              operator: operator.data.address,
-              operatorName: operator.data.name ?? operator.data.address,
-              permissions: Permission.Pay,
-              assetMask: 1,
-              validAfter: BigInt(now - 60),
-              validUntil: BigInt(validUntil),
-              payee: payee.data.address,
-              limits: { maxPerTx: mist(perPayment), maxHourlySpend: mist(perDay), maxDailySpend: mist(perDay), maxDailyTurnoverBps: 10_000, maxExecutions: 0 },
-            },
-          })
-          setDone(true)
-          await qc.invalidateQueries()
-          return [
-            { label: 'grant ROLE_PAY', url: url(role.digest) },
-            { label: 'issue capability', url: url(cap.digest) },
-          ]
-        }}
-      >
-        <p>
-          Two wallet confirmations: grant EAC <span className="font-medium">ROLE_PAY</span> to {operator.data?.name ?? shortAddr(operator.data?.address)}, then issue the
-          payment capability ({perPayment} SUI / payment, {perDay} SUI / day, payee {payee.data?.name ?? shortAddr(payee.data?.address)}).
-        </p>
-      </ConfirmTx>
-    </Card>
-  )
-}
-
 function Wizard() {
-  const { network } = useApp()
   const [params] = useSearchParams()
   const initial = params.get('purpose') === 'payments' ? 'payments' : params.get('purpose') === 'trading' ? 'trading' : null
   return (
@@ -545,7 +344,7 @@ function Wizard() {
         <ArrowLeft className="h-4 w-4" /> Buckets
       </Link>
       <h1 className="mb-5 text-2xl font-semibold">Grant a permission</h1>
-      {network === 'sui' ? <SuiWizard /> : <EvmWizard initial={initial} />}
+      <EvmWizard initial={initial} />
     </div>
   )
 }

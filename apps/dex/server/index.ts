@@ -17,7 +17,7 @@ const repoRoot = path.resolve(process.cwd(), '../..')
 loadEnv({ path: path.join(repoRoot, '.env'), quiet: true })
 
 const { AgentActionSchema, ApprovalSchema } = await import('../src/lib/agent/schema')
-const { explainError, explainMoveAbort } = await import('../src/lib/errors')
+const { explainError } = await import('../src/lib/errors')
 const { BlockedError, agentIdentities, executeAction, validateAction, verifyApproval } = await import('../src/lib/server/agent')
 const { AI_COOKIE, resolveAiKey, sealKey } = await import('../src/lib/server/ai-key')
 const { agentContext } = await import('../src/lib/server/context')
@@ -124,7 +124,6 @@ app.get('/api/agent/status', async (c) => {
   return c.json({
     evmOperator: ids.evm,
     evmOperatorGasEth: gas,
-    suiOperator: ids.sui,
     ai: { configured: !!ai, source: ai?.source ?? null, model: ai?.model ?? null },
   })
 })
@@ -173,10 +172,7 @@ app.post('/api/agent/validate', async (c) => {
 // conversation drives the trading, savings and payments agents at once. The model routes each request to the right
 // Bucket by choosing its bucketId + capabilityId from the context. Each returned action is re-validated client-side
 // (ActionFlow) and again on-chain before it can settle.
-const SelectionSchema = z.discriminatedUnion('network', [
-  z.object({ network: z.literal('sepolia'), bucketId: z.string() }),
-  z.object({ network: z.literal('sui'), bucketObjectId: z.string() }),
-])
+const SelectionSchema = z.object({ network: z.literal('sepolia'), bucketId: z.string() })
 const ChatBody = z
   .object({
     messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1).max(40),
@@ -202,7 +198,6 @@ symbols from the context, and every bucketId/capabilityId MUST belong to the SAM
   The owner's wallet sells sellAmount of sellSymbol and receives buySymbol. Needs a capability with canSwap.
 - {"action":"rebalance","network":"sepolia","bucketId","capabilityId"}  Needs canRebalance; BUCKET picks the leg.
 - {"action":"pay","network":"sepolia","bucketId","capabilityId","symbol","amount"}  Needs canPay; goes to the fixed payee.
-- {"action":"sui_pay","network":"sui","bucketObjectId","amount"}  SUI from the Sui Bucket vault to the fixed payee.
 Amounts are decimal strings in token units (e.g. "180" for 180 USDC). If the user asks for more than a limit allows,
 still propose exactly what they asked: BUCKET will enforce the limit and explain the block. Never invent ids. If no
 capability fits the request, return an empty "proposals" array and say which permission or Bucket is missing.`
@@ -284,7 +279,7 @@ app.post('/api/agent/execute', async (c) => {
     // Validation passed but the chain rejected at submission (e.g. state changed in between): report it plainly.
     const decoded = decodeBucketError(error)
     const text = redactRpc(error instanceof Error ? error.message : String(error))
-    const explained = explainError(decoded?.errorName) ?? explainMoveAbort(text)
+    const explained = explainError(decoded?.errorName)
     return c.json(
       {
         status: 'failed',

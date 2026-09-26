@@ -106,7 +106,7 @@ async function main(): Promise<void> {
     })
     const receipt = await evmClient.waitForTransactionReceipt({ hash })
     if (!receipt.contractAddress) throw new Error(`deploy of ${spec.symbol} produced no contract address`)
-    deployment.evm.tokens.push({ symbol: spec.symbol, address: receipt.contractAddress, decimals: spec.decimals, suiType: '' })
+    deployment.evm.tokens.push({ symbol: spec.symbol, address: receipt.contractAddress, decimals: spec.decimals })
     tokensAdded = true
     info(spec.symbol, `deployed ${receipt.contractAddress} (${evmTx(deployment, hash)})`)
   }

@@ -9,7 +9,6 @@ const bytes32 = z
   .string()
   .refine((value) => isHex(value) && value.length === 66, 'invalid bytes32')
   .transform((value) => value.toLowerCase() as Hex)
-const suiId = z.string().regex(/^0x[0-9a-fA-F]{1,64}$/, 'invalid Sui object id')
 
 export const EvmNetworkKind = z.enum(['sepolia', 'sepolia-fork'])
 export type EvmNetworkKind = z.infer<typeof EvmNetworkKind>
@@ -18,14 +17,13 @@ export const DeploymentTokenSchema = z.object({
   symbol: z.string().min(1),
   address,
   decimals: z.number().int().min(0).max(18),
-  suiType: z.string(),
 })
 export type DeploymentToken = z.infer<typeof DeploymentTokenSchema>
 
-/** A capability issued during deployment/demo setup, on either chain. */
+/** A capability issued during deployment/demo setup. */
 export const DeploymentCapabilitySchema = z.object({
   label: z.string().min(1),
-  /** EVM capability nonce (bigint as decimal string) or Sui capability nonce, whichever chain issued it. */
+  /** EVM capability nonce (bigint as decimal string). */
   nonce: z.string(),
   capabilityId: bytes32.optional(),
   operatorLabel: z.string(),
@@ -44,18 +42,6 @@ export const DeploymentBucketSchema = z.object({
   capabilities: z.array(DeploymentCapabilitySchema).default([]),
 })
 export type DeploymentBucket = z.infer<typeof DeploymentBucketSchema>
-
-/** A Bucket created natively on Sui (see `bucket::bucket`), optionally bound to an EVM twin for attribution. */
-export const SuiBucketSchema = z.object({
-  label: z.string().min(1),
-  name: z.string().min(1),
-  objectId: suiId,
-  ownerCapId: suiId,
-  owner: z.string(),
-  evmBucketId: bytes32.optional(),
-  capabilities: z.array(DeploymentCapabilitySchema).default([]),
-})
-export type SuiBucket = z.infer<typeof SuiBucketSchema>
 
 /**
  * Deployment manifest produced by `scripts/deploy` and consumed by the SDK, demo and web app.
@@ -88,17 +74,6 @@ export const DeploymentSchema = z.object({
     }),
     tokens: z.array(DeploymentTokenSchema),
   }),
-  sui: z
-    .object({
-      network: z.enum(['testnet', 'devnet', 'localnet']),
-      packageId: suiId,
-      explorer: z.string().url().nullable(),
-      /** Shared `access::AccessControl` (EAC) object every role check and `pay` reads. */
-      accessControlId: suiId.optional(),
-      /** Shared SuiNS object used by `resolve_suins_principal` / `owner_grant_roles_by_suins`. */
-      suinsObjectId: suiId.optional(),
-    })
-    .nullable(),
   ens: z
     .object({
       ownerName: z.string(),
@@ -106,7 +81,6 @@ export const DeploymentSchema = z.object({
     })
     .nullable(),
   buckets: z.array(DeploymentBucketSchema),
-  suiBuckets: z.array(SuiBucketSchema).default([]),
 })
 export type Deployment = z.infer<typeof DeploymentSchema>
 

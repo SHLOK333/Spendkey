@@ -51,16 +51,8 @@ function TokenPill({ value, options, onChange }: { value: string; options: strin
   )
 }
 
-function SuiTradeNotice() {
-  return (
-    <EmptyState title="Swaps run on Ethereum Sepolia" action={<Button asChild variant="primary"><Link to="/pay">Go to Payments</Link></Button>}>
-      The Sui BUCKET layer handles payments and delegation — swaps route through Ethereum Sepolia.
-    </EmptyState>
-  )
-}
-
 export default function TradePage() {
-  const { network, bucket, deployment } = useApp()
+  const { bucket, deployment } = useApp()
   const { address } = useOwnerWallet()
   const sel = useSelectedBucket()
   const view = useBucketView(sel.bucketId)
@@ -97,8 +89,6 @@ export default function TradePage() {
     refetchInterval: 20_000,
     queryFn: () => bucket.previewSwap({ bucketId: sel.bucketId!, capabilityId: cap!.id, tokenOut: sellToken!.address, tokenIn: buyToken!.address, amountOut }),
   })
-
-  if (network === 'sui') return <SuiTradeNotice />
 
   const sellBalance = wallet.data?.find((w) => w.symbol === sell)
   const buyBalance = wallet.data?.find((w) => w.symbol === buy)
@@ -264,7 +254,7 @@ export default function TradePage() {
 
       {/* ── Right: Authority + activity ── */}
       <div className="space-y-4">
-        <SelfCustodyPanel network="sepolia">
+        <SelfCustodyPanel>
           <div className="mb-3">
             <div className="mb-1 text-xs font-medium uppercase tracking-wider text-faint">Wallet balance</div>
             {(wallet.data ?? []).filter((w) => symbols.includes(w.symbol)).map((w) => (
@@ -275,7 +265,6 @@ export default function TradePage() {
           </div>
           {cap ? (
             <DelegatedAuthority
-              network="sepolia"
               operatorName={`${cap.capability.operatorLabel}.${view.data?.ensName ?? ''}`}
               operatorAddress={cap.capability.operator}
               perExecution={formatUsd(cap.capability.limits.maxExecutionValue)}

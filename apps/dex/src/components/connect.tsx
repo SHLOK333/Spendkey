@@ -1,17 +1,11 @@
 import { useAppKit } from '@reown/appkit/react'
 import { Wallet } from 'lucide-react'
-import { lazy, Suspense } from 'react'
 import { sepolia } from 'viem/chains'
 import { useConnect, useConnection, useConnectors, useDisconnect, useSwitchChain } from 'wagmi'
 
 import { Button } from '@/components/ui/button'
-import { useApp } from '@/lib/client/app'
 import { reownEnabled } from '@/lib/client/wagmi'
 import { shortAddr } from '@/lib/utils'
-
-// The Sui dApp Kit UI registers web components and touches `window` at import time, so it is loaded lazily
-// (never during initial render / server-side prerender concerns don't apply in this SPA).
-const SuiConnectButton = lazy(() => import('@mysten/dapp-kit-react/ui').then((m) => ({ default: m.ConnectButton })))
 
 function ReownConnect() {
   const { open } = useAppKit()
@@ -57,14 +51,7 @@ export function WrongChainNotice() {
   )
 }
 
-/** Wallet connection for the active protocol environment. */
+/** Wallet connection for the EVM (Sepolia) environment. */
 export function ConnectWallet() {
-  const { network } = useApp()
-  if (network === 'sui')
-    return (
-      <Suspense fallback={<Button variant="secondary" disabled>Sui wallet…</Button>}>
-        <SuiConnectButton />
-      </Suspense>
-    )
   return reownEnabled ? <ReownConnect /> : <InjectedConnect />
 }

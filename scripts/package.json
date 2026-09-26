@@ -8,7 +8,6 @@
   "scripts": {
     "abi": "tsx lib/generate-abis.ts",
     "deploy:evm": "tsx deploy/evm.ts",
-    "deploy:sui": "tsx deploy/sui.ts",
     "configure:ens": "tsx configure/ens.ts",
     "configure:buckets": "tsx configure/buckets.ts",
     "configure:extra-buckets": "tsx configure/extra-buckets.ts",
@@ -20,8 +19,6 @@
     "@bucket/protocol-types": "workspace:*",
     "@bucket/sdk": "workspace:*",
     "@bucket/vm": "workspace:*",
-    "@mysten/sui": "2.31.2",
-    "@mysten/suins": "2.0.12",
     "dotenv": "17.2.3",
     "viem": "2.56.8",
     "zod": "4.6.5"

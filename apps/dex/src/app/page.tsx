@@ -14,7 +14,7 @@ export default function Landing() {
 
       <div className="mx-auto max-w-3xl text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel-2 px-3 py-1 text-xs font-medium text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Self-custodial · 1inch Aqua + SwapVM · ENSv2 &amp; SuiNS
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Self-custodial · 1inch Aqua + SwapVM · ENSv2
         </span>
         <h1 className="mt-6 text-4xl font-bold leading-[1.05] tracking-tight md:text-6xl">
           Trade, pay and automate.

@@ -23,7 +23,7 @@ export interface QuickAction {
   readonly hint?: string
 }
 
-export type Selection = { network: 'sepolia'; bucketId: string } | { network: 'sui'; bucketObjectId: string }
+export type Selection = { network: 'sepolia'; bucketId: string }
 
 /** Cycling headline (Codigo "AIChatPrompt" style): fades between prompts on an interval. */
 function CyclingTitle({ phrases }: { phrases: string[] }) {
@@ -154,7 +154,7 @@ export function AgentChat({
   onConfigure: () => void
 }) {
   const scope = selections && selections.length > 0 ? selections : [selection]
-  const scopeKey = scope.map((s) => (s.network === 'sui' ? s.bucketObjectId : s.bucketId)).join(',')
+  const scopeKey = scope.map((s) => s.bucketId).join(',')
   const runner = useActionRunner()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -166,7 +166,6 @@ export function AgentChat({
   const [mode, setMode] = useState<'copilot' | 'autonomous'>('autonomous')
   const bottom = useRef<HTMLDivElement>(null)
 
-  const hasEvm = scope.some((s) => s.network === 'sepolia')
   const refreshSession = () => setSessionOpen(!!loadOwnerSession(runner.ownerAddress))
   useEffect(() => {
     setMode('autonomous')
@@ -233,7 +232,7 @@ export function AgentChat({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {mode === 'autonomous' && hasEvm ? (
+          {mode === 'autonomous' ? (
             sessionOpen ? (
               <Badge tone="green"><ShieldCheck className="mr-1 h-2.5 w-2.5" /> All agents authorized</Badge>
             ) : (

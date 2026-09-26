@@ -1,5 +1,3 @@
-import { ConnectButton } from '@mysten/dapp-kit-react/ui'
-
 import { useApp } from '../lib/context'
 import { shortHex } from '../lib/format'
 
@@ -31,7 +29,6 @@ export function Header() {
         <span className={`net ${fork ? 'net-fork' : ''}`} title={fork ? 'Local anvil fork of Sepolia' : 'Ethereum Sepolia'}>
           {fork ? 'LOCAL FORK · Sepolia' : 'Sepolia'}
         </span>
-        {config.deployment.sui ? <span className="net">Sui {config.deployment.sui.network}</span> : null}
         {evmWallet.address ? (
           evmWallet.wrongChain ? (
             <button className="btn" onClick={() => void evmWallet.switchChain()}>
@@ -45,7 +42,6 @@ export function Header() {
             {evmWallet.available ? 'Connect EVM' : 'No EVM wallet'}
           </button>
         )}
-        <ConnectButton />
       </div>
     </header>
   )

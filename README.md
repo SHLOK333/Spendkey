@@ -8,30 +8,26 @@ user's custodian**. The owner's assets stay in the owner's own wallet. What the 
 right to perform *one* kind of financial action, never custody of the funds themselves.
 
 ```
-SuiNS / ENSv2                      →  WHO is this? (identity, resolved live; never authorization by itself)
-Financial Capability               →  WHAT may that identity do? (permissions, assets, limits, time, policy version)
-Move / Solidity enforcement        →  Capability checked live, on every call — never a frontend check
-Aqua + SwapVM (EVM) / PTB (Sui)    →  HOW the authorized action actually settles
-Execution receipt                  →  WHO executed, WHY it was allowed, WHAT changed, HOW MUCH, the RESULT
+ENSv2                    →  WHO is this? (identity, resolved live; never authorization by itself)
+Financial Capability     →  WHAT may that identity do? (permissions, assets, limits, time, policy version)
+Solidity enforcement     →  Capability checked live, on every call — never a frontend check
+Aqua + SwapVM            →  HOW the authorized action actually settles
+Execution receipt        →  WHO executed, WHY it was allowed, WHAT changed, HOW MUCH, the RESULT
 ```
 
-BUCKET runs this model **natively on two chains**, not as one shared contract:
+BUCKET runs this model on the **EVM execution layer**:
 
 ```
                               FINANCIAL CAPABILITY
-                    (chain-neutral concept: scoped, revocable,
-                     hierarchical, non-escalating, limited)
-                        /                                \
-                EVM execution layer                 Sui-native layer
-                       |                                    |
-        ENSv2 → BucketCapabilities →          SuiNS-resolved address → bucket::capability →
-        Bucket program (0xd0-0xd2)             bucket::bucket (native vault, pay/pay_many/
-        → Aqua pull/push (real ERC-20s)         pay_bucket_to_bucket, real Coin<T> transfers)
+                    (scoped, revocable, hierarchical,
+                     non-escalating, limited)
+                                  |
+                          EVM execution layer
+                                  |
+                ENSv2 → BucketCapabilities →
+                Bucket program (0xd0-0xd3)
+                → Aqua pull/push (real ERC-20s)
 ```
-
-Each stack is **independently issued and independently enforced**. The EVM side never mirrors Sui's capabilities,
-and Sui never re-derives EVM's price-based rebalance math; an optional `bind_evm` link on the Sui Bucket exists
-purely for cross-chain attribution in the UI, not shared trust.
 
 ---
 
@@ -58,7 +54,7 @@ receives exactly this capability, checked in full on every single execution:
 - **policy version** matches the Bucket's current policy (a policy change immediately supersedes every capability
   issued under the old one)
 - **time window** (`validAfter` ≤ now ≤ `validUntil`)
-- **identity** — the operator still owns its ENSv2/SuiNS name right now, not just at issuance
+- **identity** — the operator still owns its ENSv2 name right now, not just at issuance
 - **permission** requested is one this capability was actually granted
 - **asset / venue** scope
 - **spend velocity** — per-execution, hourly, daily and daily-turnover ceilings, charged to this capability *and*
@@ -174,28 +170,6 @@ For blocked executions (over-limit, revoked capability) the trace shows which op
 
 ---
 
-## Sui-native layer
-
-Sui is not a mirror of the EVM Bucket. `contracts/sui` is a complete, independent Financial Capability + settlement
-stack: `bucket::bucket` (the Bucket object, a native vault of Sui coins, guardians, an optional attribution-only
-`EvmBinding`), `bucket::capability` (issuance, delegation, revocation, spend velocity — the same chain-neutral
-primitive, enforced in Move), `bucket::policy` (per-Bucket payment policy and its commitment) and `bucket::receipt`
-(structured EVM execution attribution, for Buckets that choose to bind an EVM twin).
-
-- **Native issuance** — the owner (`OwnerCap`) issues a root capability directly to an address resolved off-chain
-  from a SuiNS name; an operator (`OperatorCap`) with `PERM_DELEGATE` issues a child the same way EVM does —
-  `ChildAuthority ⊆ ParentAuthority`, checked in Move.
-- **Native payments** — `pay` (single, fixed payee), `pay_many` (atomic multi-recipient — every payment succeeds or
-  the whole call aborts), `pay_bucket_to_bucket` (moves a `Balance<T>` directly between two Bucket vaults in one
-  atomic call, no Coin round-trip).
-- **Receiving policies** — a destination Bucket may restrict `pay_bucket_to_bucket` senders and amount bounds.
-- **Guardian** — pause and revoke, never withdraw or change ownership.
-- **No price oracle** — spend-velocity limits are denominated in a coin's own smallest units, and daily turnover is
-  measured against that Bucket's own vault balance of the same coin — this is a deliberate, documented simplicity
-  for a settlement-focused stack, not an oversight (see `docs/SECURITY.md`).
-
----
-
 ## Repository
 
 ```
@@ -208,21 +182,21 @@ contracts/
       vm/BucketCapabilityGuard.sol   SwapVM instruction 0xd0 — WHO/intent/capability chain
       vm/BucketQuote.sol             SwapVM instruction 0xd1 — policy-bound price
       vm/BucketSpendLimit.sol        SwapVM instruction 0xd2 — every quantitative cap
-      vm/BucketOpcodes.sol           the Bucket instruction set (Deadline, Salt, 0xd0-0xd2 — nothing else)
+      vm/BucketOpcodes.sol           the Bucket instruction set (Deadline, Salt, 0xd0-0xd3 — nothing else)
       libraries/                   BucketMath, BucketPolicyLib, BucketPermissions, CapabilityLib, BucketEngine
       oracle/                      BucketReferencePriceFeed (IBucketPriceFeed)
       tokens/                      BucketTestToken (testnet assets)
     script/Deploy.s.sol
     lib/                         vendored, pinned upstream sources (see lib/VENDORED.md)
-  sui/                         Move package `bucket`: codec, permissions, policy, capability, receipt, bucket
 packages/
-  protocol-types/              canonical TS model shared by both stacks: constants, permissions, capability +
+  protocol-types/              canonical TS model: constants, permissions, capability +
                                 policy validation/commitment, identity, manifest schema
-  sdk/                         BucketClient (EVM), SuiBucketClient (Sui-native), typed ABIs, BCS layouts, tx builders
+  sdk/                         BucketClient (EVM), typed ABIs, tx builders
 vm/                            @bucket/vm: Bucket instruction encoders, program compiler/decoder, taker traits,
                                 exact BucketMath mirror, rebalance/fill simulation
+apps/dex/                      BUCKET DEX frontend (React + Vite, Hono API)
 apps/web/                      React dashboard (Vite)
-scripts/                       deploy (EVM, Sui), configure (ENSv2 hierarchy, prices), demo (end-to-end EVM flow)
+scripts/                       deploy (EVM), configure (ENSv2 hierarchy, prices), demo (end-to-end EVM flow)
 docs/                          ARCHITECTURE.md · BUCKET_VM.md · SECURITY.md · DEPLOYMENT.md
 ```
 
@@ -236,7 +210,6 @@ docs/                          ARCHITECTURE.md · BUCKET_VM.md · SECURITY.md ·
 | Aqua | Sepolia | **Not officially deployed on Sepolia.** The official deterministic deployment (`0x1111113c…6a90a`) covers mainnets only, so `Deploy.s.sol` deploys the **unmodified** official `AquaRouter` source (pinned commit). Set `AQUA_ADDRESS` to reuse an existing Aqua. |
 | `BucketSwapVMRouter` | Sepolia | `0x1B99c7FE80b670d0d689B0887302A4a156009b20` — runs only `BucketOpcodes` (0xd0–0xd3 + Deadline + Salt); deliberately narrower than the official upstream router. [Etherscan](https://sepolia.etherscan.io/address/0x1B99c7FE80b670d0d689B0887302A4a156009b20) |
 | `AquaRouter` | Sepolia | `0x219F46B2eC62F36617EA11b8dDC8a83b53261e78` — unmodified official source (no official Sepolia deployment). [Etherscan](https://sepolia.etherscan.io/address/0x219F46B2eC62F36617EA11b8dDC8a83b53261e78) |
-| Sui | testnet | `contracts/sui` published by `pnpm deploy:sui` |
 | Assets | Sepolia | `tUSDC` (6), `tETH` (18), `tSUI` (9), `tPEPE` (18, deliberately never part of a Bucket policy — unapproved-asset rejection demo) test ERC-20s. Reference prices published by an authorized reporter from configuration. |
 
 A local **anvil fork of Sepolia** is supported (`EVM_NETWORK=sepolia-fork`) and labelled `LOCAL FORK` in the UI.
@@ -245,9 +218,7 @@ A local **anvil fork of Sepolia** is supported (`EVM_NETWORK=sepolia-fork`) and 
 
 ## Quickstart
 
-Prerequisites: Node ≥ 22, pnpm 9, Foundry, a Sui CLI ≥ 1.60 (`SUI_BIN`; a working build was staged for this repo at
-`.tools/sui.exe` — see `docs/DEPLOYMENT.md` if you need to fetch your own), Sepolia ETH on the deployer, owner and
-operator accounts, testnet SUI on the Sui owner key.
+Prerequisites: Node ≥ 22, pnpm 9, Foundry, Sepolia ETH on the deployer, owner and operator accounts.
 
 ```bash
 pnpm install
@@ -256,7 +227,6 @@ cp apps/web/.env.example apps/web/.env
 
 pnpm evm:build && pnpm abi      # compile contracts, regenerate typed ABIs
 pnpm deploy:evm                 # Aqua (official source), Bucket router, authority, capabilities, controller, feed, test tokens
-pnpm deploy:sui                 # publish the Move package
 pnpm configure:ens              # <owner>.eth, UserRegistries, trading/savings/payments, agent.trading.<owner>.eth
 pnpm demo                       # create the trading Bucket, issue capabilities, rebalance + pay, then reject
                                  # a malicious agent's over-limit / unapproved-asset / revoked-capability attempts
@@ -293,9 +263,7 @@ if (view.plan?.required) {
 ```
 
 `createBucket`, `getBucket`, `getBucketAllocation`, `executeRebalance` are on `BucketClient` (EVM). Lower-level EVM
-access: `BucketEvm` (controller + capabilities + authority + router), `EnsV2`. For Sui, `SuiBucketClient` wraps
-native capability issuance/delegation/revocation and `pay` / `payMany` / `payBucketToBucket`, backed by `BucketSui`
-(read) and a pluggable `SuiExecutor` (write — a keypair in scripts, a wallet in the browser). `@bucket/vm` exposes
+access: `BucketEvm` (controller + capabilities + authority + router), `EnsV2`. `@bucket/vm` exposes
 `compileBucketProgram`, `verifyBucketOrder`, `planRebalance`, `simulateFill`, `maxFillAmountIn`, `buildTakerTraits`.
 
 ---
@@ -304,12 +272,12 @@ native capability issuance/delegation/revocation and `pay` / `payMany` / `payBuc
 
 | Invariant | Enforced by |
 |---|---|
-| A capability never grants an owner-only permission | `BucketPermissions.isDelegable` / `permissions::is_delegable` |
-| `ChildAuthority ⊆ ParentAuthority`, checked once at issuance | `BucketCapabilities.delegate` / `bucket::capability::issue_child` |
-| No execution proceeds unless every link of the chain is valid *now* | `BucketCapabilities.requireAuthorized` (0xd0 calls it) / `capability::check_link` + `check_leaf` |
-| Cumulative usage never exceeds hourly/daily/turnover limits, for the capability *and* the Bucket | `BucketCapabilities.consume` + `BucketController._chargeBucket` / `bucket::capability::charge` |
-| Ownership never moves except through the ENSv2 name / the `OwnerCap` object | no Bucket function writes EVM ownership; `OwnerCap` is minted exactly once |
-| Withdrawal is never delegable | `PERM_WITHDRAW` excluded from `DELEGABLE_PERMISSIONS` on both chains |
+| A capability never grants an owner-only permission | `BucketPermissions.isDelegable` |
+| `ChildAuthority ⊆ ParentAuthority`, checked once at issuance | `BucketCapabilities.delegate` |
+| No execution proceeds unless every link of the chain is valid *now* | `BucketCapabilities.requireAuthorized` (0xd0 calls it) |
+| Cumulative usage never exceeds hourly/daily/turnover limits, for the capability *and* the Bucket | `BucketCapabilities.consume` + `BucketController._chargeBucket` |
+| Ownership never moves except through the ENSv2 name | no Bucket function writes EVM ownership |
+| Withdrawal is never delegable | `PERM_WITHDRAW` excluded from `DELEGABLE_PERMISSIONS` |
 | Rebalances/swaps stay within limits | opcode `0xd2` / the same checks mirrored in `@bucket/vm` |
 | Slippage bounded by the tightest limit in the capability chain | opcode `0xd1`: concession ≤ `chainLimits(...).maxSlippageBps` |
 | Only permitted assets, only the capability's fixed payee for payments | opcodes `0xd0`/`0xd2` + hooks; `BucketController.pay` |
