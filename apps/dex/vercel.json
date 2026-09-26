@@ -5,5 +5,8 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/.well-known/agent-card.json", "destination": "/api/.well-known/agent-card.json" }
+  ],
+  "crons": [
+    { "path": "/api/cron/refresh-prices", "schedule": "*/30 * * * *" }
   ]
 }

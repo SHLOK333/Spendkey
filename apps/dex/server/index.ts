@@ -25,7 +25,7 @@ const { evmServer } = await import('../src/lib/server/evm')
 const { protocolEvents } = await import('../src/lib/server/indexer')
 const { redactRpc, sepoliaRpcUrls } = await import('../src/lib/server/rpc')
 const { onboardConfig, onboardFaucet } = await import('../src/lib/server/onboard')
-const { register } = await import('../src/instrumentation')
+const { register, refreshPrices } = await import('../src/instrumentation')
 
 const app = new Hono()
 
@@ -35,6 +35,22 @@ app.onError((err, c) => c.json({ error: redactRpc(err instanceof Error ? err.mes
 
 // --- Public deployment manifest (the single source of contract addresses; no secrets) -----------------------
 app.get('/api/deployment', (c) => c.json(loadDeployment()))
+
+// --- Cron: refresh the on-chain reference price feed so live swaps never go stale ---------------------------
+// Serverless functions can't hold a background interval, so on Vercel this is driven by a Cron Job (see
+// vercel.json). Safe to call any time; publishes the configured reference prices from the reporter key.
+// If CRON_SECRET is set, Vercel Cron sends it as a bearer token and we require it; otherwise the route is open
+// (testnet-only, no funds at risk — it just refreshes public price timestamps).
+app.get('/api/cron/refresh-prices', async (c) => {
+  const secret = process.env.CRON_SECRET
+  if (secret && c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ error: 'unauthorized' }, 401)
+  try {
+    const result = await refreshPrices()
+    return c.json(result, result.ok ? 200 : 503)
+  } catch (error) {
+    return c.json({ ok: false, error: redactRpc(error instanceof Error ? error.message : String(error)) }, 502)
+  }
+})
 
 // --- Onboarding: agent operator identity a new owner grants to (public; no secrets) ------------------------
 app.get('/api/onboard/config', (c) => c.json(onboardConfig()))
