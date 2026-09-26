@@ -233,3 +233,34 @@ export function maxFillAmountIn(
   }
   return best
 }
+
+/**
+ * Human-readable reason why `maxFillAmountIn` found nothing, for surfacing to an operator. Mirrors the same
+ * constraints in order of how often they block a demo rebalance: settlement liquidity, then the buy-side
+ * deficit, then the binding policy/limit at the largest deficit-bounded probe.
+ */
+export function diagnoseUnfillable(
+  snapshot: BucketSnapshot,
+  intent: Intent,
+  limits: EffectiveLimits,
+  aquaBalanceOut: bigint,
+  nowSeconds: bigint,
+): string {
+  const assetIn = snapshot.assets.find((a) => isAddressEqual(a.token, intent.tokenIn))
+  const assetOut = snapshot.assets.find((a) => isAddressEqual(a.token, intent.tokenOut))
+  if (!assetIn || !assetOut) return 'the intent buy/sell token is not held by this Bucket'
+  if (aquaBalanceOut === 0n) {
+    return 'the settlement (Aqua) balance/allowance for the sell asset is 0 — the holder must approve and fund the settlement spender'
+  }
+  const pre = valuate(snapshot.assets)
+  const inIndex = snapshot.assets.indexOf(assetIn)
+  const deficit = deficitValue(pre, assetIn.targetBps, inIndex)
+  if (deficit <= 0n) return 'the buy asset is already at or above its target weight — nothing to rebalance into it'
+  const hi = amountOf(deficit, assetIn.decimals, assetIn.priceWad, 'floor')
+  const probe = simulateFill(snapshot, intent, limits, hi > 0n ? hi : 1n, nowSeconds)
+  if (!probe.ok && probe.failure) return `the fill is blocked by policy: ${probe.failure}`
+  if (probe.ok && probe.amountOut > aquaBalanceOut) {
+    return 'the settlement (Aqua) balance for the sell asset is too small to cover any fill'
+  }
+  return 'no amount satisfies the current policy and spend limits'
+}
