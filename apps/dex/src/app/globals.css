@@ -64,3 +64,39 @@
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* RALE parameter sliders — the track fill is set inline per-slider (tinted). */
+.rale-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+.rale-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--color-fg);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease;
+}
+.rale-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.rale-slider::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--color-fg);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.rale-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+}
