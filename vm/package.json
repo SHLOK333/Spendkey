@@ -1,0 +1,21 @@
+{
+  "name": "@bucket/vm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bucket SwapVM tooling: instruction encoders, program compiler/decoder and an exact bigint mirror of BucketMath",
+  "license": "LicenseRef-Degensoft-SwapVM-1.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@bucket/protocol-types": "workspace:*",
+    "viem": "2.56.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
