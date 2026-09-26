@@ -1,0 +1,31 @@
+[profile.default]
+src = "src"
+out = "out"
+script = "script"
+test = "test"
+libs = ["node_modules", "lib"]
+solc_version = "0.8.30"
+evm_version = "prague"
+optimizer = true
+optimizer_runs = 1
+via_ir = true
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+remappings = [
+    "forge-std/=node_modules/forge-std/src/",
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+    "@1inch/solidity-utils/=node_modules/@1inch/solidity-utils/",
+    "@1inch/aqua/=lib/aqua/",
+    "@1inch/swap-vm/=lib/swap-vm/",
+    "@ensdomains/contracts-v2/=lib/ens-contracts-v2/src/",
+]
+
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+local = "http://127.0.0.1:8545"
+
+[fmt]
+line_length = 120
+
+# Fast iteration profile: same IR pipeline, optimizer off.
+[profile.dev]
+optimizer = false

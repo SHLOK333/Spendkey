@@ -1,0 +1,16 @@
+{
+  "name": "@bucket/contracts-evm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BUCKET EVM execution layer: ENSv2 authority, Bucket controller, Aqua + SwapVM Bucket router",
+  "license": "LicenseRef-Degensoft-SwapVM-1.1",
+  "scripts": {
+    "build": "forge build",
+    "fmt": "forge fmt"
+  },
+  "dependencies": {
+    "@1inch/solidity-utils": "6.9.10",
+    "@openzeppelin/contracts": "5.4.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.11.0"
+  }
+}
