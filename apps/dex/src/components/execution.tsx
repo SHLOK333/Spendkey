@@ -12,7 +12,6 @@ const KIND_TITLE: Record<AgentAction['action'], string> = {
   swap: 'Swap',
   rebalance: 'Rebalance',
   pay: 'Payment',
-  sui_pay: 'Payment',
 }
 
 export function PolicyChecklist({ checks }: { checks: PolicyCheck[] }) {
@@ -344,7 +343,7 @@ export function ReceiptCard({ result, validation }: { result: ExecutionResult; v
       <div className="mt-3 grid grid-cols-2 gap-3">
         {result.actual.sold ? (
           <div>
-            <div className="text-xs text-muted">{result.kind === 'pay' || result.kind === 'sui_pay' ? 'Paid' : 'Actual input'}</div>
+            <div className="text-xs text-muted">{result.kind === 'pay' ? 'Paid' : 'Actual input'}</div>
             <div className="text-base font-semibold tabular">
               {result.actual.sold.amount} {result.actual.sold.symbol}
             </div>
@@ -367,7 +366,7 @@ export function ReceiptCard({ result, validation }: { result: ExecutionResult; v
       </div>
       <div className="mt-3 text-xs text-muted">Amounts read from the on-chain receipt, not the quote.</div>
       <div className="mt-3 border-t border-accent/15 pt-3">
-        <div className="mb-1 text-xs text-muted">{result.network === 'sui' ? 'Bucket vault after' : 'Wallet balance updated'}</div>
+        <div className="mb-1 text-xs text-muted">Wallet balance updated</div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular">
           {result.walletAfter.map((w) => (
             <span key={w.symbol}>
@@ -425,13 +424,34 @@ function QuoteBlock({ validation }: { validation: ValidationResult }) {
  * → execution by the agent operator → receipt. `autonomous` skips the per-action signature when an owner-signed
  * session exists, but never skips validation.
  */
-export function ActionFlow({ action, autonomous = false, onClose }: { action: AgentAction; autonomous?: boolean; onClose?: () => void }) {
+export type ActionPhase = 'validating' | 'review' | 'signing' | 'executing' | 'done'
+export type ActionOutcome = 'executed' | 'blocked' | 'failed' | null
+
+export function ActionFlow({
+  action,
+  autonomous = false,
+  onClose,
+  onPhase,
+}: {
+  action: AgentAction
+  autonomous?: boolean
+  onClose?: () => void
+  /** Observes the live execution phase (and terminal outcome) so callers can drive their own UI (e.g. an animated pipeline). */
+  onPhase?: (phase: ActionPhase, outcome: ActionOutcome) => void
+}) {
   const runner = useActionRunner()
   const sessionVersion = useSessionVersion()
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [phase, setPhase] = useState<'validating' | 'review' | 'signing' | 'executing' | 'done'>('validating')
+  const [phase, setPhase] = useState<ActionPhase>('validating')
   const [response, setResponse] = useState<ExecuteResponse | null>(null)
+
+  // Report phase + terminal outcome upward. Runs after each phase/response change.
+  useEffect(() => {
+    const outcome: ActionOutcome = phase !== 'done' ? null : error ? 'failed' : (response?.status ?? 'failed')
+    onPhase?.(phase, outcome)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, response, error])
 
   async function run(v: ValidationResult) {
     try {
@@ -442,10 +462,7 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
       let approval = autonomous ? runner.currentSession(action) : null
       if (autonomous && !approval) {
         setPhase('signing')
-        approval =
-          action.network === 'sepolia'
-            ? await runner.startOwnerSession(60)
-            : await runner.startSession(action.network, targetOf(action), 60)
+        approval = await runner.startOwnerSession(60)
       }
       setPhase(approval ? 'executing' : 'signing')
       approval = approval ?? (await runner.approveAction(action))
@@ -501,7 +518,7 @@ export function ActionFlow({ action, autonomous = false, onClose }: { action: Ag
           <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Agent execution</div>
           <div className="text-lg font-semibold">{KIND_TITLE[action.action]}</div>
         </div>
-        <Badge tone={action.network === 'sui' ? 'blue' : 'neutral'}>{action.network === 'sui' ? 'Sui Testnet' : 'Sepolia'}</Badge>
+        <Badge tone="neutral">Sepolia</Badge>
       </div>
 
       {validation ? (

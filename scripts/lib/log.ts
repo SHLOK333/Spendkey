@@ -12,10 +12,6 @@ export function evmTx(deployment: Deployment, hash: string): string {
   return deployment.evm.explorer ? `${deployment.evm.explorer}/tx/${hash}` : hash
 }
 
-export function suiTx(deployment: Deployment, digest: string): string {
-  return deployment.sui?.explorer ? `${deployment.sui.explorer}/tx/${digest}` : digest
-}
-
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

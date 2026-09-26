@@ -4,13 +4,13 @@
 
 A Bucket never becomes your custodian. Your assets stay in **your** wallet. What you hand an operator — a human or an
 AI agent — is a **Financial Capability**: a scoped, revocable, time-bound, policy-bound, amount-limited right to do
-*one* kind of action. It's enforced live on-chain on every call, never by the frontend. Runs natively on **two
-chains** (EVM + Sui), independently issued and enforced.
+*one* kind of action. It's enforced live on-chain on every call, never by the frontend — on the **EVM execution
+layer** (ENSv2 + 1inch Aqua + SwapVM).
 
 ```mermaid
 flowchart LR
   O["Owner wallet<br/>(holds all assets)"] -->|issues| C["Financial Capability<br/>scoped · limited · revocable"]
-  C -->|bound to ENSv2 / SuiNS name| A["Operator / AI agent"]
+  C -->|bound to ENSv2 name| A["Operator / AI agent"]
   A -->|requests fill| VM["SwapVM program<br/>0xd0 → 0xd3"]
   VM -->|all checks pass| AQ["1inch Aqua<br/>pull / push"]
   AQ -->|real ERC-20 move| O
@@ -31,8 +31,6 @@ via Aqua `pull` from the holder.
 | SwapVM router (instruction set *is* the Bucket program) | [`BucketSwapVMRouter.sol`](contracts/evm/src/vm/BucketSwapVMRouter.sol) |
 | Ship strategy → Aqua | [`sdk/evm/client.ts:268`](packages/sdk/src/evm/client.ts#L268) · [`onboard.ts:235`](apps/dex/src/lib/client/onboard.ts#L235) |
 | Fill via Aqua pull/push | [`sdk/evm/client.ts:459`](packages/sdk/src/evm/client.ts#L459) |
-
-Sui settles natively instead (real `Coin<T>` via PTB) — [`bucket.move`](contracts/sui/sources/bucket.move).
 
 ---
 
@@ -76,24 +74,21 @@ flowchart TD
   grant more than it holds. Rules: [`BucketPermissions.sol`](contracts/evm/src/libraries/BucketPermissions.sol).
 - **Branch-level kill switch** — revoking a name (or `revokeAll`, which bumps the epoch) severs that whole subtree at
   once — [`sdk/evm/client.ts`](packages/sdk/src/evm/client.ts).
-- **Same model, both chains** — this is ENSv2 **Enhanced Access Control (EAC)** semantics, ported Move-native on Sui
-  (resource-scoped nybble-packed role bitmaps, per-role admins, `ROOT_RESOURCE`, guardians) —
-  [`access.move`](contracts/sui/sources/access.move).
+- **Enhanced Access Control (EAC)** — guardianship is an ENSv2 EAC role granted to the live owner of a Bucket's name
+  and re-checked live; operators hold no standing role — [`BucketAuthority.sol`](contracts/evm/src/BucketAuthority.sol).
 
-Every capability is bounded by its Bucket **policy**, validated identically in Solidity/Move/TS:
-[`BucketPolicyLib.sol`](contracts/evm/src/libraries/BucketPolicyLib.sol) (invariants I1–I10) ·
-[`policy.move`](contracts/sui/sources/policy.move).
+Every capability is bounded by its Bucket **policy**, validated identically in Solidity and TS:
+[`BucketPolicyLib.sol`](contracts/evm/src/libraries/BucketPolicyLib.sol) (invariants I1–I10).
 
 ---
 
-## Identity: ENSv2 & SuiNS
+## Identity: ENSv2
 
 Names answer *who*, never *what* — the **address** is always the security principal.
 
-- **ENSv2 (EVM)** — resolved by descending the registry tree (`getSubregistry` per label), not ENSv1 namehash —
-  [`ens/ensv2.ts`](packages/sdk/src/ens/ensv2.ts).
-- **SuiNS (Sui)** — `resolve_suins_principal` reads the real on-chain SuiNS registry for the target address, which
-  becomes the EAC principal — [`sui/bucket.ts:604`](packages/sdk/src/sui/bucket.ts#L604).
+- **ENSv2** — resolved by descending the registry tree (`getSubregistry` per label), not ENSv1 namehash —
+  [`ens/ensv2.ts`](packages/sdk/src/ens/ensv2.ts). The resolved address becomes the security principal for every
+  capability check.
 
 ---
 
@@ -116,11 +111,11 @@ Inputs are **real** (on-chain prices + balances; session-observed σ), the visua
 
 ```bash
 pnpm install
-pnpm dev   # Vite SPA :3100, Hono API :3101
+cd apps/dex && pnpm dev   # Vite SPA :3100, Hono API :3101
 ```
 
 Client holds **no secrets** (RPC / agent / OpenAI keys are server-side — [`apps/dex/AGENTS.md`](apps/dex/AGENTS.md)).
-Testnets only. Addresses: [`deployments/sepolia.json`](deployments/sepolia.json).
+Testnets only (Sepolia). Addresses: [`deployments/sepolia.json`](deployments/sepolia.json).
 
 ---
 

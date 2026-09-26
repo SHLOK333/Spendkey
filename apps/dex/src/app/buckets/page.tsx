@@ -14,8 +14,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { DoodleEmpty, DoodleVault } from '@/components/ui/doodles'
 import { Badge, Card, CardHeader, EmptyState, Identity, Mono, Row, Skeleton, StatusDot } from '@/components/ui/primitives'
 import { useApp, useOwnerWallet } from '@/lib/client/app'
-import { useBucketView, useCapabilities, useKnownBuckets, useSuiBucket, type CapabilityRow } from '@/lib/client/queries'
-import { useSuiOwner } from '@/lib/client/sui'
+import { useBucketView, useCapabilities, useKnownBuckets, type CapabilityRow } from '@/lib/client/queries'
 import { dateLabel, relativeExpiry, shortAddr, tokenAmount } from '@/lib/utils'
 
 function permissionLabels(permissions: number): string[] {
@@ -34,14 +33,14 @@ function OperatorAvatar() {
   )
 }
 
-function OwnershipExplainer({ network }: { network: 'sepolia' | 'sui' }) {
+function OwnershipExplainer() {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="flex items-start gap-3 rounded-xl border border-line bg-panel p-4">
         <Wallet className="mt-0.5 h-5 w-5 text-accent" />
         <div>
           <div className="text-sm font-semibold">Wallet = ownership</div>
-          <div className="text-sm text-muted">{network === 'sui' ? 'Your keys and your OwnerCap. On Sui, payment funds sit in the Bucket vault only you can withdraw.' : 'Your assets and your keys. Nothing is deposited anywhere.'}</div>
+          <div className="text-sm text-muted">Your assets and your keys. Nothing is deposited anywhere.</div>
         </div>
       </div>
       <div className="flex items-start gap-3 rounded-xl border border-line bg-panel p-4">
@@ -353,130 +352,7 @@ function EvmBucket({ bucketId }: { bucketId: Hex }) {
   )
 }
 
-function SuiBuckets() {
-  const { deployment } = useApp()
-  const sb = deployment.suiBuckets[0]
-  const data = useSuiBucket(sb?.objectId ?? null)
-  const owner = useSuiOwner()
-  const qc = useQueryClient()
-  const [revoke, setRevoke] = useState<{ nonce: bigint; name: string; operator: string; hasRole: boolean } | null>(null)
-  const suiTx = (d: string) => `${deployment.sui?.explorer ?? 'https://suiscan.xyz/testnet'}/tx/${d}`
-  if (!sb || !deployment.sui) return <EmptyState title="No Sui Bucket in this deployment" />
-  if (data.isLoading || !data.data) return <Skeleton className="h-64" />
-  const { state, vaultSui, capabilities } = data.data
-  const isOwner = !!owner.address && owner.address === state.owner
-  return (
-    <div className="space-y-5">
-      <Card className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="text-xl font-semibold">{state.name}</div>
-              <Badge tone={state.status === 1 ? 'green' : 'amber'}>
-                <StatusDot active={state.status === 1} /> {state.status === 1 ? 'Active' : 'Paused'}
-              </Badge>
-              <Badge tone="blue">Sui Testnet</Badge>
-            </div>
-            <div className="mt-1 text-sm text-muted">
-              Owner <Mono>{shortAddr(state.owner)}</Mono> · policy v{state.policy.version}
-            </div>
-          </div>
-          {isOwner ? (
-            <Button asChild variant="primary" size="sm">
-              <Link to="/buckets/new">
-                <Plus className="h-4 w-4" /> Grant permission
-              </Link>
-            </Button>
-          ) : (
-            <Badge>Read-only — connect the owner&apos;s Sui wallet to manage</Badge>
-          )}
-        </div>
-        <div className="mt-4 flex items-start gap-3 rounded-xl bg-panel-2 p-4">
-          <Lock className="mt-0.5 h-4 w-4 text-accent" />
-          <div className="text-sm">
-            <div className="font-medium">
-              {tokenAmount(vaultSui, 9)} SUI in the Bucket&apos;s Move vault
-            </div>
-            <div className="text-muted">
-              On Sui, payments draw from this vault. Only the owner&apos;s OwnerCap can withdraw it; operators can only pay their fixed payee within limits.
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {capabilities.map((c) => {
-          const expired = Number(c.validUntil) * 1000 < Date.now()
-          const active = c.status === 1 && !expired && c.epoch === state.capabilityEpoch && c.policyVersion === state.policy.version
-          return (
-            <Card key={c.nonce.toString()} className="flex flex-col p-5">
-              <div className="flex items-start justify-between">
-                <div className="text-base font-semibold">Payments Agent</div>
-                <Badge tone={active ? 'green' : 'red'}>
-                  <StatusDot active={active} /> {c.status === 2 ? 'Revoked' : expired ? 'Expired' : active ? 'Active' : 'Superseded'}
-                </Badge>
-              </div>
-              <div className="mt-4">
-                <div className="text-xs text-muted">Operator (SuiNS identity)</div>
-                <Identity name={c.operatorName} address={c.operator} />
-              </div>
-              <div className="mt-3 border-t border-line pt-2">
-                <Row label="EAC ROLE_PAY">{c.hasRolePay ? <Badge tone="green">granted</Badge> : <Badge tone="red">not granted</Badge>}</Row>
-                <Row label="Max / payment">{tokenAmount(c.limits.maxPerTx, 9)} SUI</Row>
-                <Row label="Max / day">{tokenAmount(c.limits.maxDailySpend, 9)} SUI</Row>
-                <Row label="Fixed payee">
-                  <Mono>{shortAddr(c.payee)}</Mono>
-                </Row>
-                <Row label="Expires">{expired ? 'expired' : relativeExpiry(c.validUntil)}</Row>
-              </div>
-              {isOwner && (active || c.hasRolePay) ? (
-                <Button size="sm" variant="danger" className="mt-4" onClick={() => setRevoke({ nonce: c.nonce, name: c.operatorName, operator: c.operator, hasRole: c.hasRolePay })}>
-                  Revoke authority
-                </Button>
-              ) : null}
-            </Card>
-          )
-        })}
-      </div>
-
-      <ConfirmTx
-        open={!!revoke}
-        onOpenChange={(o) => !o && setRevoke(null)}
-        title="Revoke this capability?"
-        confirmLabel="Revoke"
-        destructive
-        run={async () => {
-          if (!owner.client || !revoke || !deployment.sui?.accessControlId) throw new Error('Connect the owner Sui wallet')
-          const out: TxOutcome[] = []
-          const r1 = await owner.client.revokeCapability({ packageId: deployment.sui.packageId, bucketObjectId: sb.objectId, nonce: revoke.nonce })
-          out.push({ label: 'revoke_capability', url: suiTx(r1.digest) })
-          if (revoke.hasRole) {
-            const r2 = await owner.client.ownerRevokeRoles({
-              packageId: deployment.sui.packageId,
-              accessControlId: deployment.sui.accessControlId,
-              bucketObjectId: sb.objectId,
-              ownerCapId: sb.ownerCapId,
-              roleBitmap: 0x10n,
-              principal: revoke.operator,
-            })
-            out.push({ label: 'owner_revoke_roles', url: suiTx(r2.digest) })
-          }
-          return out
-        }}
-        onDone={() => void qc.invalidateQueries()}
-      >
-        <p>
-          <span className="font-medium">{revoke?.name}</span> will no longer be able to pay from this Bucket: the capability is revoked
-          {revoke?.hasRole ? ' and its EAC ROLE_PAY removed (two wallet confirmations)' : ''}.
-        </p>
-        <p className="mt-2 text-accent">The vault stays under your OwnerCap.</p>
-      </ConfirmTx>
-    </div>
-  )
-}
-
 export default function BucketsPage() {
-  const { network } = useApp()
   const { address } = useOwnerWallet()
   const { buckets, isLoading } = useKnownBuckets()
   const mine = address ? buckets.filter((b) => isAddressEqual(b.holder, address)) : []
@@ -502,10 +378,8 @@ export default function BucketsPage() {
         }
         art={<DoodleVault width={132} height={132} />}
       />
-      <OwnershipExplainer network={network} />
-      {network === 'sui' ? (
-        <SuiBuckets />
-      ) : isLoading && shown.length === 0 ? (
+      <OwnershipExplainer />
+      {isLoading && shown.length === 0 ? (
         <Skeleton className="h-64" />
       ) : shown.length === 0 ? (
         <EmptyState title="No Buckets yet">A Bucket is bound to an ENSv2 name you own.</EmptyState>

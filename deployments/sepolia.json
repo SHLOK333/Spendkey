@@ -26,59 +26,44 @@
       {
         "symbol": "USDC",
         "address": "0x73569B9eAf403Ca0c1b00b82783F118e6F89A71b",
-        "decimals": 6,
-        "suiType": ""
+        "decimals": 6
       },
       {
         "symbol": "ETH",
         "address": "0x9C3Fe7Eb69a0F917F9cA32A80a78DCD07d442f4D",
-        "decimals": 18,
-        "suiType": ""
+        "decimals": 18
       },
       {
         "symbol": "SUI",
         "address": "0xa6017314E82d292c1572eE2095edC34b4c643Fe9",
-        "decimals": 9,
-        "suiType": "0x2::sui::SUI"
+        "decimals": 9
       },
       {
         "symbol": "PEPE",
         "address": "0x6ab4d43e840bE1546C282BF2104fDDcb8bF5DDdB",
-        "decimals": 18,
-        "suiType": ""
+        "decimals": 18
       },
       {
         "symbol": "DAI",
         "address": "0x9408746500D24A65206311D2245750CF7a67c247",
-        "decimals": 18,
-        "suiType": ""
+        "decimals": 18
       },
       {
         "symbol": "WBTC",
         "address": "0xd7288ea9Ca4431a7e70aD66d8e288E06aE71d66d",
-        "decimals": 8,
-        "suiType": ""
+        "decimals": 8
       },
       {
         "symbol": "USDT",
         "address": "0xF1C541B2276D3143154517c52a00e522136D89C6",
-        "decimals": 6,
-        "suiType": ""
+        "decimals": 6
       },
       {
         "symbol": "EURC",
         "address": "0x3E01031d02b81274FB59cC5070A2E10f8C612C2f",
-        "decimals": 6,
-        "suiType": ""
+        "decimals": 6
       }
     ]
-  },
-  "sui": {
-    "network": "testnet",
-    "packageId": "0x145ba9b61b1e7c022af62b0fb3160a835d8592eacfd1c5e96f261fc44b4b1153",
-    "explorer": "https://suiscan.xyz/testnet",
-    "accessControlId": "0xf763e21898521dfd4cf7e4b7eb725ad8eb6f4414d3e4b39f02e230e0e244bfe5",
-    "suinsObjectId": "0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3"
   },
   "ens": {
     "ownerName": "shlok.eth",
@@ -140,16 +125,6 @@
           "permissions": 1
         }
       ]
-    }
-  ],
-  "suiBuckets": [
-    {
-      "label": "test",
-      "name": "TestBucket",
-      "objectId": "0x03ca254481432de995613bfa31314c7d5f4cbefdeb1cfc8859c0540543809314",
-      "ownerCapId": "0x882bf79499a189cb3972b3553590b655a3873a45b847aa98e87cd1956087c5c5",
-      "owner": "0xa5bc69b87f98bfb47e6fae168991353ebc0805f398dfe011fa89dbf5e0702176",
-      "capabilities": []
     }
   ]
 }

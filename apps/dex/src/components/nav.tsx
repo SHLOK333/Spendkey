@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { ConnectWallet, WrongChainNotice } from '@/components/connect'
-import { useApp, type Network } from '@/lib/client/app'
 import { cn } from '@/lib/utils'
 
 type NavLink = { href: string; label: string; icon: ReactNode; desc?: string }
@@ -23,83 +22,6 @@ const INSIGHTS: NavLink[] = [
   { href: '/activity', label: 'Activity', icon: <Activity className="h-[18px] w-[18px]" />, desc: 'On-chain event feed' },
   { href: '/rale', label: 'RALE', icon: <Sparkles className="h-[18px] w-[18px]" />, desc: 'Risk-adaptive liquidity engine' },
 ]
-
-type NetworkOption = { value: Network; label: string; hint: string; color: string }
-
-/** Network dropdown — pick the active chain; new chains can be added to this list. */
-export function NetworkSwitch({ className }: { className?: string }) {
-  const { network, setNetwork, deployment } = useApp()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  const options: NetworkOption[] = [
-    { value: 'sepolia', label: 'Ethereum', hint: 'Sepolia', color: '#627eea' },
-    { value: 'sui', label: 'Sui', hint: 'Testnet', color: '#4da2ff' },
-  ]
-  const active = options.find((o) => o.value === network) ?? options[0]!
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
-
-  return (
-    <div ref={ref} className={cn('relative', className)}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-full border border-white/10 bg-panel-2 py-2 pl-3 pr-2.5 text-sm font-medium text-fg transition-colors hover:bg-panel-3 cursor-pointer"
-      >
-        <span className="flex items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: active.color }} />
-          {active.label}
-        </span>
-        <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', open && 'rotate-180')} />
-      </button>
-
-      {open ? (
-        <div
-          role="listbox"
-          className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-white/10 bg-panel p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]"
-        >
-          {options.map((o) => {
-            const disabled = o.value === 'sui' && !deployment.sui
-            const selected = o.value === network
-            return (
-              <button
-                key={o.value}
-                role="option"
-                aria-selected={selected}
-                disabled={disabled}
-                onClick={() => {
-                  setNetwork(o.value)
-                  setOpen(false)
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition-colors',
-                  disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:bg-white/5',
-                  selected && 'bg-white/5',
-                )}
-              >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium text-fg">{o.label}</span>
-                  <span className="ml-1.5 text-xs text-faint">{disabled ? 'unavailable' : o.hint}</span>
-                </span>
-                {selected ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
-    </div>
-  )
-}
 
 function Logo() {
   return (
@@ -263,7 +185,6 @@ export function Nav() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <NetworkSwitch className="hidden w-[150px] sm:block" />
             <div className="hidden sm:block">
               <ConnectWallet />
             </div>
@@ -282,7 +203,6 @@ export function Nav() {
           <div className="mt-2 rounded-3xl border border-white/10 bg-panel/95 p-4 backdrop-blur-xl lg:hidden">
             <MobileLinks onNavigate={() => setOpen(false)} />
             <div className="mt-4 space-y-3 border-t border-line pt-4">
-              <NetworkSwitch />
               <div className="[&>button]:w-full [&>button]:justify-center">
                 <ConnectWallet />
               </div>

@@ -2,7 +2,6 @@ import { formatUsd, formatWeight } from '@bucket/protocol-types'
 
 import { AllocationStack } from '../components/Allocation'
 import { Chip, ErrorBox, Spinner } from '../components/primitives'
-import { SuiPanel } from '../components/SuiPanel'
 import { useApp } from '../lib/context'
 import { bucketTitle } from '../lib/format'
 import { useBucketViews } from '../lib/queries'
@@ -23,7 +22,7 @@ export function Dashboard() {
         <div className="thesis">
           <div>
             <b>WHO</b>
-            <span>ENSv2 / SuiNS identity, resolved live — never assumed authorization by itself</span>
+            <span>ENSv2 identity, resolved live — never assumed authorization by itself</span>
           </div>
           <div>
             <b>WHAT</b>
@@ -31,7 +30,7 @@ export function Dashboard() {
           </div>
           <div>
             <b>HOW</b>
-            <span>1inch Aqua + SwapVM on EVM, native Move settlement on Sui — each chain enforces its own</span>
+            <span>1inch Aqua + SwapVM on EVM — enforced live on every fill</span>
           </div>
         </div>
       </section>
@@ -75,9 +74,6 @@ export function Dashboard() {
           </a>
         ))}
       </div>
-
-      <h2 className="section-title">Sui-native Buckets</h2>
-      <SuiPanel />
     </main>
   )
 }

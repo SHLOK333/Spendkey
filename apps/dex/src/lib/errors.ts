@@ -1,4 +1,4 @@
-/** Human-readable explanations of BUCKET protocol failures (EVM custom errors, simulator failures, Move aborts). */
+/** Human-readable explanations of BUCKET protocol failures (EVM custom errors, simulator failures). */
 export interface Explained {
   readonly title: string
   readonly message: string
@@ -57,49 +57,6 @@ const EVM: Record<string, Explained> = {
   PostStateOutOfBand: { title: 'Outside allocation band', message: "This trade would push an asset outside its policy band." },
 }
 
-const SUI: Record<string, Record<number, Explained>> = {
-  bucket: {
-    603: { title: 'Bucket paused', message: 'This Bucket is paused.' },
-    604: { title: 'Bucket closed', message: 'This Bucket is closed.' },
-    609: { title: 'Unknown capability', message: 'No capability matches this OperatorCap.' },
-    611: { title: 'Asset not in policy', message: "This coin type is not part of the Bucket's policy." },
-    612: { title: 'Amount too small', message: 'The amount must be greater than zero.' },
-    613: { title: 'Execution blocked', message: "The Bucket's vault does not hold enough of this coin." },
-    614: { title: 'Deadline passed', message: 'The payment deadline has passed.' },
-    615: { title: 'Recipient not allowed', message: "Payments under this capability can only go to its fixed payee." },
-    616: { title: 'Execution blocked', message: 'This payment exceeds your Bucket limit.' },
-    617: { title: 'Execution blocked', message: "This exceeds the Bucket-wide limit." },
-    621: { title: 'Execution blocked', message: 'This operator is no longer authorized for this Bucket (EAC role revoked).' },
-  },
-  capability: {
-    410: { title: 'Authority revoked', message: 'Every capability on this Bucket was revoked (epoch bumped).' },
-    411: { title: 'Policy changed', message: 'The policy changed after this capability was issued.' },
-    412: { title: 'Authority revoked', message: 'This capability was revoked.' },
-    413: { title: 'Execution count used up', message: 'This capability has reached its execution cap.' },
-    414: { title: 'Not active yet', message: 'This capability is not valid yet.' },
-    415: { title: 'Authority expired', message: 'This capability has expired.' },
-    416: { title: 'Not permitted', message: 'This capability does not grant payments.' },
-    417: { title: 'Asset not allowed', message: 'This capability does not cover this asset.' },
-    419: { title: 'Velocity limit reached', message: "This exceeds the capability's hourly or daily limit." },
-    420: { title: 'Wrong operator', message: 'This account is not the operator of the capability.' },
-  },
-  access: {
-    705: { title: 'Name not registered', message: 'That SuiNS name is not registered.' },
-    706: { title: 'Name expired', message: 'That SuiNS name has expired.' },
-    707: { title: 'Name has no address', message: 'That SuiNS name does not point to an address.' },
-  },
-}
-
 export function explainError(name: string | null | undefined): Explained | null {
   return name ? (EVM[name] ?? null) : null
-}
-
-/** Parses `MoveAbort ... abort code: N, in '0x..::module::function'` from a Sui status/error string. */
-export function explainMoveAbort(text: string): (Explained & { code: number; module: string }) | null {
-  const m = /abort code: (\d+), in '0x[0-9a-fA-F]+::(\w+)::/.exec(text) ?? /"abortCode":"(\d+)".*?"module":"(\w+)"/.exec(text)
-  if (!m?.[1] || !m[2]) return null
-  const code = Number(m[1])
-  const module = m[2]
-  const known = SUI[module]?.[code]
-  return known ? { ...known, code, module } : { title: 'Execution blocked', message: `Move abort ${code} in ${module}.`, code, module }
 }

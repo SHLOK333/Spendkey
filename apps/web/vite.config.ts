@@ -12,7 +12,6 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', '@tanstack/react-query'],
           evm: ['viem'],
-          sui: ['@mysten/sui/grpc', '@mysten/sui/transactions', '@mysten/sui/bcs', '@mysten/dapp-kit-react'],
         },
       },
     },

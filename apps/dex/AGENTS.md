@@ -34,11 +34,11 @@ no `app/api/*` route handlers, no server components, and no `next` dependency. D
 
 - Links use `react-router-dom` `<Link to=...>` (not `next/link` / `href`).
 - Route params use `useSearchParams()` / `useLocation()` from `react-router-dom`.
-- Lazy client-only widgets (e.g. Sui `ConnectButton`) use React `lazy()` + `<Suspense>` (not `next/dynamic`).
+- Lazy client-only widgets use React `lazy()` + `<Suspense>` (not `next/dynamic`).
 
 ## Security invariants (unchanged from the protocol)
 
-- The permission system is enforced by on-chain Move (Sui) and contracts (EVM). The frontend never enforces
+- The permission system is enforced by on-chain EVM contracts. The frontend never enforces
   role membership, resource scope, grants/revocations, expiration, capability validity, financial limits,
   Bucket ownership, or guardian restrictions.
 - Never hardcode, log, or commit private keys. The LLM never controls unrestricted wallet signing.

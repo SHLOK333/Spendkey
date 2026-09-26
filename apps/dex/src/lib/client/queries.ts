@@ -1,5 +1,4 @@
 import { CapabilityStatus, Permission, hasPermissions, type Capability, type EffectiveLimits } from '@bucket/protocol-types'
-import type { SuiCapabilityView } from '@bucket/sdk'
 import { valueOf } from '@bucket/vm'
 import { useQuery } from '@tanstack/react-query'
 import { erc20Abi, isAddressEqual, type Address, type Hex } from 'viem'
@@ -248,7 +247,6 @@ export function useAgentCards() {
 export interface AgentStatus {
   readonly evmOperator: Address | null
   readonly evmOperatorGasEth: string | null
-  readonly suiOperator: string | null
   readonly ai: { configured: boolean; source: 'byok' | 'server' | null; model: string | null }
 }
 
@@ -257,46 +255,6 @@ export function useAgentStatus() {
     queryKey: ['agent-status'],
     refetchInterval: 30_000,
     queryFn: async (): Promise<AgentStatus> => (await fetch('/api/agent/status', { cache: 'no-store' })).json() as Promise<AgentStatus>,
-  })
-}
-
-export interface SuiBucketData {
-  readonly state: Awaited<ReturnType<NonNullable<ReturnType<typeof useApp>['suiReader']>['getBucket']>>
-  readonly vaultSui: bigint
-  readonly capabilities: Array<SuiCapabilityView & { hasRolePay: boolean }>
-}
-
-export function useSuiBucket(objectId: string | null) {
-  const { suiReader, deployment } = useApp()
-  return useQuery({
-    queryKey: ['sui-bucket', objectId],
-    enabled: !!objectId && !!suiReader,
-    refetchInterval: 15_000,
-    queryFn: async (): Promise<SuiBucketData> => {
-      const state = await suiReader!.getBucket(objectId!)
-      const [vaultSui, caps] = await Promise.all([
-        suiReader!.vaultBalance(objectId!, '0x2::sui::SUI'),
-        suiReader!.listCapabilities(objectId!, state.capabilityNonce),
-      ])
-      const ac = deployment.sui?.accessControlId
-      const capabilities = await Promise.all(
-        caps.map(async (c) => ({ ...c, hasRolePay: ac ? await suiReader!.hasRole(ac, objectId!, c.operator, 0x10n) : false })),
-      )
-      return { state, vaultSui, capabilities: capabilities.reverse() }
-    },
-  })
-}
-
-export function useSuiBalance(address: string | null) {
-  const { suiClient } = useApp()
-  return useQuery({
-    queryKey: ['sui-balance', address],
-    enabled: !!address && !!suiClient,
-    refetchInterval: 15_000,
-    queryFn: async () => {
-      const res = await suiClient!.getBalance({ owner: address!, coinType: '0x2::sui::SUI' })
-      return BigInt(res.balance.balance)
-    },
   })
 }
 

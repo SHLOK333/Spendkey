@@ -33,12 +33,6 @@ const EnvSchema = z.object({
   ENS_OPERATOR_LABEL: z.string().regex(/^[a-z0-9-]+$/).default('agent'),
   ENS_REGISTRATION_YEARS: z.coerce.number().int().min(1).max(5).default(1),
 
-  SUI_NETWORK: z.enum(['testnet', 'devnet', 'localnet']).default('testnet'),
-  SUI_GRPC_URL: optional(z.string().url()),
-  SUI_PRIVATE_KEY: optional(z.string().startsWith('suiprivkey')),
-  SUI_OPERATOR_PRIVATE_KEY: optional(z.string().startsWith('suiprivkey')),
-  SUI_BIN: optional(z.string()),
-
   PRICE_USDC: z.string().default('1'),
   PRICE_ETH: z.string().default('2500'),
   PRICE_SUI: z.string().default('3.5'),
@@ -66,16 +60,4 @@ export function required<K extends keyof Env>(key: K): NonNullable<Env[K]> {
 
 export function evmRpcUrl(): string {
   return env.EVM_NETWORK === 'sepolia-fork' ? env.LOCAL_FORK_RPC_URL : required('SEPOLIA_RPC_URL')
-}
-
-export function suiGrpcUrl(): string {
-  if (env.SUI_GRPC_URL) return env.SUI_GRPC_URL
-  switch (env.SUI_NETWORK) {
-    case 'testnet':
-      return 'https://fullnode.testnet.sui.io:443'
-    case 'devnet':
-      return 'https://fullnode.devnet.sui.io:443'
-    case 'localnet':
-      return 'http://127.0.0.1:9000'
-  }
 }

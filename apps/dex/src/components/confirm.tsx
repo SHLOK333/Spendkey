@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Details, Spinner, TxLink } from '@/components/ui/primitives'
-import { explainError, explainMoveAbort } from '@/lib/errors'
+import { explainError } from '@/lib/errors'
 
 export interface TxOutcome {
   readonly label: string
@@ -44,7 +44,7 @@ export function ConfirmTx({
     } catch (e) {
       const decoded = decodeBucketError(e)
       const text = e instanceof Error ? e.message : String(e)
-      const explained = explainError(decoded?.errorName) ?? explainMoveAbort(text)
+      const explained = explainError(decoded?.errorName)
       const rejected = /User rejected|denied|rejected the request/i.test(text)
       setError({
         title: rejected ? 'Cancelled in wallet' : (explained?.title ?? 'Transaction failed'),

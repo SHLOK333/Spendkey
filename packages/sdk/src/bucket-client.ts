@@ -110,8 +110,6 @@ export class BucketClientError extends Error {
  *   WHO   ENSv2               owner = live owner of the Bucket name; guardians resolved through the same registry
  *   WHAT  BucketCapabilities  a Financial Capability defines what an operator may do (see @bucket/protocol-types)
  *   HOW    Aqua + SwapVM       the Bucket program (0xd0 guard, 0xd1 quote, 0xd2 spend limit) enforces it per fill
- *
- * For the Sui-native stack (independent capabilities, native payments, no price feed), see `SuiBucketClient`.
  */
 export class BucketClient {
   constructor(
@@ -504,4 +502,3 @@ function unboundedLimits() {
 }
 
 export { BucketStatus } from '@bucket/protocol-types'
-export * from './sui-client'

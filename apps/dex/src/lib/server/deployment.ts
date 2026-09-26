@@ -1,10 +1,10 @@
-
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-
 import { parseDeployment, type Deployment } from '@bucket/protocol-types'
 
-/** The deployment manifest written by the deploy/configure/demo scripts — the single source of addresses. */
+// Bundled at build time (works both on a Node server and in a serverless function, where the repo's
+// files are not on disk). The manifest is written by the deploy/configure/demo scripts.
+import deploymentJson from '../../../../../deployments/sepolia.json'
+
+/** The deployment manifest — the single source of contract addresses. */
 export function loadDeployment(): Deployment {
-  return parseDeployment(JSON.parse(readFileSync(path.join(process.cwd(), '..', '..', 'deployments', 'sepolia.json'), 'utf8')))
+  return parseDeployment(deploymentJson)
 }

@@ -12,14 +12,6 @@ export function evmAddressUrl(deployment: Deployment, address: string): string |
   return deployment.evm.explorer ? `${deployment.evm.explorer}/address/${address}` : null
 }
 
-export function suiTxUrl(deployment: Deployment, digest: string): string | null {
-  return deployment.sui?.explorer ? `${deployment.sui.explorer}/tx/${digest}` : null
-}
-
-export function suiObjectUrl(deployment: Deployment, objectId: string): string | null {
-  return deployment.sui?.explorer ? `${deployment.sui.explorer}/object/${objectId}` : null
-}
-
 /** "trading.shlok.eth" -> "TRADING" */
 export function bucketTitle(ensName: string): string {
   return (ensName.split('.')[0] ?? ensName).toUpperCase()

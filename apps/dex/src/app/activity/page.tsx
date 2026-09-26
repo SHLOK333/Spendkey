@@ -1,11 +1,9 @@
-import { ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 
 import { ActivityRow, useActivityItems, type ActivityCategory } from '@/components/activity'
 import { FilterBar, PageHero } from '@/components/ui/data-table'
 import { DoodleEmpty, DoodlePulse } from '@/components/ui/doodles'
 import { Card, EmptyState, Skeleton } from '@/components/ui/primitives'
-import { useApp } from '@/lib/client/app'
 import { useKnownBuckets } from '@/lib/client/queries'
 
 const FILTERS: Array<{ value: 'all' | ActivityCategory; label: string }> = [
@@ -19,33 +17,11 @@ const FILTERS: Array<{ value: 'all' | ActivityCategory; label: string }> = [
 ]
 
 export default function ActivityPage() {
-  const { network, deployment } = useApp()
   const { items, isLoading, error } = useActivityItems()
   const { buckets } = useKnownBuckets()
   const [filter, setFilter] = useState<'all' | ActivityCategory>('all')
   const label = (id: string | null) => buckets.find((b) => b.bucketId === id)?.label ?? null
   const shown = filter === 'all' ? items : items.filter((i) => i.categories.includes(filter))
-
-  if (network === 'sui') {
-    const sb = deployment.suiBuckets[0]
-    return (
-      <div className="mx-auto max-w-3xl">
-        <EmptyState
-          icon={<DoodlePulse width={96} height={96} />}
-          title="Sui activity lives on the Bucket object"
-          action={
-            sb ? (
-              <a className="inline-flex items-center gap-1 text-sm text-brand" href={`${deployment.sui?.explorer}/object/${sb.objectId}`} target="_blank" rel="noreferrer">
-                Open {sb.name} on Suiscan <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            ) : null
-          }
-        >
-          Every Sui payment, grant and revocation mutates the shared Bucket object; its transaction history is the Sui activity feed. Executions you run here link directly to their Move transaction.
-        </EmptyState>
-      </div>
-    )
-  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

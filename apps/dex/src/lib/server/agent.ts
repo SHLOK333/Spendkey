@@ -1,8 +1,7 @@
 
 import { CapabilityStatus, BucketStatus, Permission, formatUsd, hasPermissions, type DeploymentToken } from '@bucket/protocol-types'
-import { bucketControllerAbi, decodeBucketError, toReceipt, buildPayTx, type SuiCapabilityView } from '@bucket/sdk'
+import { bucketControllerAbi, decodeBucketError, toReceipt } from '@bucket/sdk'
 import { amountOf, planRebalance, valueOf } from '@bucket/vm'
-import { verifyPersonalMessageSignature } from '@mysten/sui/verify'
 import {
   erc20Abi,
   formatUnits,
@@ -25,21 +24,14 @@ import {
   type PolicyCheck,
   type ValidationResult,
 } from '@/lib/agent/schema'
-import { explainError, explainMoveAbort } from '@/lib/errors'
+import { explainError } from '@/lib/errors'
 
 import { loadDeployment } from './deployment'
 import { evmAgentWallet, evmServer } from './evm'
-import { suiAgentClient, suiAgentKeypair, suiServer } from './sui'
-
-const ROLE_PAY = 0x10n
-const SUI_TYPE = '0x2::sui::SUI'
-const SUI_DECIMALS = 9
-const DAY_MS = 86_400_000n
 
 type Swap = Extract<AgentAction, { action: 'swap' }>
 type Rebalance = Extract<AgentAction, { action: 'rebalance' }>
 type Pay = Extract<AgentAction, { action: 'pay' }>
-type SuiPay = Extract<AgentAction, { action: 'sui_pay' }>
 
 class Checks {
   readonly list: PolicyCheck[] = []
@@ -74,10 +66,6 @@ function symbolOf(address: string): { symbol: string; decimals: number } {
 
 function explorerTx(hash: string): string {
   return `${loadDeployment().evm.explorer ?? 'https://sepolia.etherscan.io'}/tx/${hash}`
-}
-
-function suiExplorerTx(digest: string): string {
-  return `${loadDeployment().sui?.explorer ?? 'https://suiscan.xyz/testnet'}/tx/${digest}`
 }
 
 async function evmDryRun(call: { functionName: string; args: readonly unknown[] }, account: Address): Promise<{ ok: true } | { ok: false; name: string | null; raw: string }> {
@@ -319,129 +307,6 @@ function result(action: AgentAction, checks: Checks, quote: ValidationResult['qu
   }
 }
 
-// ================================================================================================= Sui validation
-
-async function suiContext(action: SuiPay) {
-  const s = suiServer()
-  if (!s || !s.sui.accessControlId || !s.sui.suinsObjectId) throw new Error('Sui deployment is not configured in the manifest')
-  const keypair = suiAgentKeypair()
-  const agent = keypair?.toSuiAddress() ?? null
-  const bucket = await s.reader.getBucket(action.bucketObjectId)
-  const caps = await s.reader.listCapabilities(action.bucketObjectId, bucket.capabilityNonce)
-  const nowMs = BigInt(Date.now())
-  const payCaps = caps.filter((c) => agent && c.operator === agent && hasPermissions(c.permissions, Permission.Pay))
-  const cap: SuiCapabilityView | null =
-    payCaps.find((c) => c.status === 1 && c.epoch === bucket.capabilityEpoch && c.policyVersion === bucket.policy.version && nowMs / 1000n <= c.validUntil) ??
-    payCaps.at(-1) ??
-    null
-  let operatorCapId: string | null = null
-  if (agent && cap) {
-    const owned = await s.client.listOwnedObjects({ owner: agent, type: `${s.sui.packageId}::bucket::OperatorCap` })
-    for (const o of owned.objects) {
-      const oc = await s.reader.getOperatorCap(o.objectId)
-      if (oc.bucketId === bucket.objectId && oc.capabilityNonce === cap.nonce) operatorCapId = o.objectId
-    }
-  }
-  return { s, agent, bucket, cap, operatorCapId, nowMs }
-}
-
-async function validateSuiPay(action: SuiPay): Promise<ValidationResult> {
-  const ctx = await suiContext(action)
-  const { s, agent, bucket, cap, nowMs } = ctx
-  const checks = new Checks()
-  const amount = parseUnits(action.amount, SUI_DECIMALS)
-
-  let resolvedName: string | null = null
-  if (cap?.operatorName.endsWith('.sui')) {
-    try {
-      const target = await s.reader.resolveSuinsPrincipal(s.sui.suinsObjectId!, cap.operatorName)
-      resolvedName = target === agent ? cap.operatorName : null
-    } catch {
-      resolvedName = null
-    }
-  }
-  checks.add('operator', 'Operator identity', !!agent && !!cap, agent ? (cap ? `${cap.operatorName} → ${short(agent)}${resolvedName ? ' (live SuiNS)' : ''}` : `no PAY capability names ${short(agent)}`) : 'the Sui agent key is not configured on the server', {
-    title: 'Execution blocked',
-    message: 'This operator has no payment authority on this Bucket.',
-  })
-  const role = agent ? await s.reader.hasRole(s.sui.accessControlId!, bucket.objectId, agent, ROLE_PAY) : false
-  checks.add('role', 'EAC ROLE_PAY', role, role ? 'granted on this Bucket (Move-enforced)' : 'not granted or revoked', {
-    title: 'Execution blocked',
-    message: 'This operator is no longer authorized for this Bucket (EAC role revoked).',
-  })
-  if (cap) {
-    const problems: string[] = []
-    if (cap.status !== 1) problems.push(cap.status === 2 ? 'revoked' : 'not active')
-    if (cap.epoch !== bucket.capabilityEpoch) problems.push('revoked by kill switch')
-    if (cap.policyVersion !== bucket.policy.version) problems.push('policy changed since issuance')
-    if (nowMs / 1000n > cap.validUntil) problems.push('expired')
-    if (bucket.status !== 1) problems.push('Bucket paused')
-    checks.add('capability', 'Capability active', problems.length === 0, problems.length === 0 ? `expires ${new Date(Number(cap.validUntil) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC` : problems.join(', '), {
-      title: 'Execution blocked',
-      message: problems.includes('revoked') ? 'This operator is no longer authorized for this Bucket.' : `This capability is ${problems.join(', ')}.`,
-    })
-    checks.add('limit', 'Execution limit', amount <= cap.limits.maxPerTx, `${formatUnits(amount, 9)} ${amount <= cap.limits.maxPerTx ? "≤" : ">"} ${formatUnits(cap.limits.maxPerTx, 9)} SUI`, {
-      title: 'Execution blocked',
-      message: 'This payment exceeds your Bucket limit.',
-      requested: `${formatUnits(amount, 9)} SUI`,
-      allowed: `${formatUnits(cap.limits.maxPerTx, 9)} SUI`,
-    })
-    const today = nowMs / DAY_MS
-    const spentToday = cap.usage.dayWindow === today ? cap.usage.dayValue : 0n
-    const remaining = cap.limits.maxDailySpend - spentToday
-    checks.add('velocity', 'Daily limit', amount <= remaining, `${formatUnits(remaining, 9)} SUI remaining today`, {
-      title: 'Execution blocked',
-      message: 'This would exceed the daily limit.',
-      requested: `${formatUnits(amount, 9)} SUI`,
-      allowed: `${formatUnits(remaining, 9)} SUI`,
-    })
-  }
-  const vault = await s.reader.vaultBalance(bucket.objectId, SUI_TYPE)
-  checks.add('balance', 'Bucket vault balance', vault >= amount, `${formatUnits(vault, 9)} SUI in the Bucket's Move vault`, {
-    title: 'Execution blocked',
-    message: "The Bucket's vault does not hold enough SUI.",
-  })
-  checks.add('opcap', 'OperatorCap held by agent', !!ctx.operatorCapId, ctx.operatorCapId ? short(ctx.operatorCapId) : 'the agent holds no OperatorCap for this capability', {
-    title: 'Execution blocked',
-    message: 'The agent does not hold an OperatorCap for this Bucket.',
-  })
-
-  if (agent && cap && ctx.operatorCapId) {
-    const tx = buildPayTx({
-      packageId: s.sui.packageId,
-      bucketObjectId: bucket.objectId,
-      accessControlId: s.sui.accessControlId!,
-      operatorCapId: ctx.operatorCapId,
-      coinType: SUI_TYPE,
-      recipient: cap.payee,
-      amount,
-      deadline: nowMs / 1000n + 600n,
-    })
-    tx.setSender(agent)
-    const sim = await s.client.simulateTransaction({ transaction: tx })
-    if (sim.$kind === 'Transaction' && sim.Transaction.status.success) {
-      checks.add('dryrun', 'Move dry run', true, 'bucket::pay accepted by Move (simulated, nothing submitted)')
-    } else {
-      const status = JSON.stringify(sim.$kind === 'Transaction' ? sim.Transaction.status : sim.FailedTransaction.status)
-      const e = explainMoveAbort(status)
-      checks.add('dryrun', 'Move dry run', false, e ? `${e.module}::abort ${e.code}` : status.slice(0, 200), {
-        title: e?.title ?? 'Execution blocked',
-        message: e?.message ?? 'Move rejects this payment.',
-        ...(e ? { errorName: `${e.module}::${e.code}` } : {}),
-      })
-    }
-  }
-  return {
-    ok: checks.ok,
-    action,
-    checks: checks.list,
-    blocked: checks.ok ? null : checks.blocked,
-    quote: { sell: { symbol: 'SUI', amount: action.amount }, buy: null, valueUsd: null, route: `Move vault → fixed payee ${cap ? short(cap.payee) : '?'}` },
-    operator: { address: agent ?? '', name: cap?.operatorName ?? null },
-    capabilityLabel: cap ? `nonce ${cap.nonce}` : null,
-  }
-}
-
 export async function validateAction(action: AgentAction): Promise<ValidationResult> {
   switch (action.action) {
     case 'swap':
@@ -450,8 +315,6 @@ export async function validateAction(action: AgentAction): Promise<ValidationRes
       return validateRebalance(action)
     case 'pay':
       return validatePay(action)
-    case 'sui_pay':
-      return validateSuiPay(action)
   }
 }
 
@@ -462,18 +325,6 @@ export async function validateAction(action: AgentAction): Promise<ValidationRes
  *  agent's authority. */
 export async function verifyApproval(action: AgentAction, approval: Approval): Promise<void> {
   if (approval.expires < Math.floor(Date.now() / 1000)) throw new Error('approval expired')
-
-  if (action.action === 'sui_pay') {
-    const s = suiServer()
-    if (!s) throw new Error('Sui not configured')
-    const bucket = await s.reader.getBucket(action.bucketObjectId)
-    // `session-all` binds the owner address, not a single Bucket, so one signature covers every Bucket the owner holds.
-    const target = approval.scope === 'session-all' ? bucket.owner : action.bucketObjectId
-    const message = approvalMessage({ scope: approval.scope, target, actionHash: keccak256(toBytes(canonicalAction(action))), expires: approval.expires })
-    const pk = await verifyPersonalMessageSignature(new TextEncoder().encode(message), approval.signature)
-    if (pk.toSuiAddress() !== bucket.owner) throw new Error('approval was not signed by the Bucket owner')
-    return
-  }
 
   const { bucket, publicClient } = evmServer()
   const snapshot = await bucket.evm.loadBucket(action.bucketId as Hex)
@@ -506,41 +357,6 @@ export class BlockedError extends Error {
 export async function executeAction(action: AgentAction): Promise<{ validation: ValidationResult; result: ExecutionResult }> {
   const validation = await validateAction(action)
   if (!validation.ok) throw new BlockedError(validation)
-
-  if (action.action === 'sui_pay') {
-    const ctx = await suiContext(action)
-    const agent = suiAgentClient()
-    if (!agent || !ctx.cap || !ctx.operatorCapId) throw new Error('Sui agent not ready')
-    const amount = parseUnits(action.amount, SUI_DECIMALS)
-    const paid = await agent.client.pay({
-      packageId: ctx.s.sui.packageId,
-      bucketObjectId: ctx.bucket.objectId,
-      accessControlId: ctx.s.sui.accessControlId!,
-      operatorCapId: ctx.operatorCapId,
-      coinType: SUI_TYPE,
-      recipient: ctx.cap.payee,
-      amount,
-      deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
-    })
-    const tx = await ctx.s.client.getTransaction({ digest: paid.digest, include: { balanceChanges: true } })
-    const done = tx.$kind === 'Transaction' ? tx.Transaction : tx.FailedTransaction
-    const received = done.balanceChanges?.find((b) => b.address === ctx.cap!.payee && b.coinType.endsWith('::sui::SUI') && BigInt(b.amount) > 0n)
-    const vaultAfter = await ctx.s.reader.vaultBalance(ctx.bucket.objectId, SUI_TYPE)
-    return {
-      validation,
-      result: {
-        network: 'sui',
-        kind: 'sui_pay',
-        transactions: [{ label: 'bucket::pay', hash: paid.digest, url: suiExplorerTx(paid.digest) }],
-        actual: {
-          sold: { symbol: 'SUI', amount: formatUnits(received ? BigInt(received.amount) : amount, SUI_DECIMALS) },
-          bought: null,
-          recipient: ctx.cap.payee,
-        },
-        walletAfter: [{ symbol: 'SUI (Bucket vault)', amount: formatUnits(vaultAfter, SUI_DECIMALS) }],
-      },
-    }
-  }
 
   const wallet = evmAgentWallet()
   if (!wallet) throw new Error('EVM agent key not configured')
@@ -605,7 +421,6 @@ export async function executeAction(action: AgentAction): Promise<{ validation: 
 
 export function agentIdentities() {
   const evm = evmAgentWallet()
-  const sui = suiAgentKeypair()
-  return { evm: evm?.account.address ?? null, sui: sui?.toSuiAddress() ?? null }
+  return { evm: evm?.account.address ?? null }
 }
 

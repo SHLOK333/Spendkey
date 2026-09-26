@@ -6,41 +6,13 @@ import { agentIdentities } from './agent'
 import { loadDeployment } from './deployment'
 import { evmServer } from './evm'
 import { protocolEvents } from './indexer'
-import { suiServer } from './sui'
 
-export type Selection = { network: 'sepolia'; bucketId: string } | { network: 'sui'; bucketObjectId: string }
+export type Selection = { network: 'sepolia'; bucketId: string }
 
 /** Everything the LLM may know: balances, allocation, the agent's own authority and recent activity. No keys, no
  *  signing capability — only facts it needs to reason about the permitted task. */
 export async function agentContext(selection: Selection): Promise<Record<string, unknown>> {
   const ids = agentIdentities()
-  if (selection.network === 'sui') {
-    const s = suiServer()
-    if (!s) throw new Error('Sui not configured')
-    const bucket = await s.reader.getBucket(selection.bucketObjectId)
-    const caps = await s.reader.listCapabilities(bucket.objectId, bucket.capabilityNonce)
-    const vault = await s.reader.vaultBalance(bucket.objectId, '0x2::sui::SUI')
-    return {
-      network: 'Sui Testnet',
-      bucket: { objectId: bucket.objectId, name: bucket.name, owner: bucket.owner, status: bucket.status === 1 ? 'ACTIVE' : 'PAUSED' },
-      custody: "On Sui, payments draw from the Bucket's Move vault, which only the owner's OwnerCap can withdraw.",
-      vault: { SUI: formatUnits(vault, 9) },
-      agentOperator: ids.sui,
-      agentCapabilities: caps
-        .filter((c) => c.operator === ids.sui)
-        .map((c) => ({
-          nonce: c.nonce.toString(),
-          operatorName: c.operatorName,
-          permissions: permissionNames(c.permissions),
-          maxPerPaymentSui: formatUnits(c.limits.maxPerTx, 9),
-          maxDailySui: formatUnits(c.limits.maxDailySpend, 9),
-          payee: c.payee,
-          validUntil: new Date(Number(c.validUntil) * 1000).toISOString(),
-          status: c.status === 1 ? 'ACTIVE' : c.status === 2 ? 'REVOKED' : 'EXHAUSTED',
-        })),
-      supportedActions: ['sui_pay'],
-    }
-  }
 
   const d = loadDeployment()
   const { bucket } = evmServer()
