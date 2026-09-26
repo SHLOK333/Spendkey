@@ -1,0 +1,24 @@
+{
+  "name": "@bucket/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BUCKET SDK: typed clients for the ENSv2 authority, the EVM execution layer (Aqua + SwapVM) and the Sui Bucket object",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@bucket/protocol-types": "workspace:*",
+    "@bucket/vm": "workspace:*",
+    "@mysten/sui": "2.31.2",
+    "viem": "2.56.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
