@@ -3,6 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "noCheck": true,
+    "baseUrl": ".",
     "types": ["node"],
     "paths": {
       "@/*": ["apps/dex/src/*"]

@@ -17,3 +17,6 @@ apps/web/dist/
 apps/dex/dist/
 .next/
 *.tsbuildinfo
+
+.vercel
+.env*.local
