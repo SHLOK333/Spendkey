@@ -26,15 +26,15 @@ export default function Landing() {
         </p>
         <div className="mt-10 flex items-center justify-center gap-3">
           <Button asChild variant="primary" size="lg">
-            <Link to="/onboard">
-              Start from scratch <ArrowRight className="h-4 w-4" />
+            <Link to="/trade">
+              Trade on a ready Bucket <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link to="/trade">Launch App</Link>
+            <Link to="/onboard">Create your own</Link>
           </Button>
         </div>
-        <p className="mt-3 text-xs text-faint">New wallet? We&apos;ll register your .eth name, create your Bucket and set up the agent — start to finish.</p>
+        <p className="mt-3 text-xs text-faint">Jump into a ready-made Bucket instantly — or register your own .eth name, Bucket and agent from scratch. No registration wait on the ready one.</p>
       </div>
 
       <div className="mx-auto mt-20 grid max-w-4xl gap-4 text-left md:grid-cols-3">

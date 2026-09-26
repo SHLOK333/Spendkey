@@ -232,7 +232,7 @@ docs/                          ARCHITECTURE.md · BUCKET_VM.md · SECURITY.md ·
 
 | Component | Network | Address / source |
 |---|---|---|
-| ENSv2 | Sepolia | Official deployment (`ensdomains/contracts-v2`, tag `sepolia-deployment-2026-06-29`): RootRegistry `0x11b5…f50c`, ETHRegistry `0x67b7…4b43`, ETHRegistrar `0xa444…5a30`, UserRegistry impl `0x840f…61c0`, VerifiableFactory `0x118b…b70f` |
+| ENSv2 | Sepolia | Official deployment (`ensdomains/contracts-v2`, 2026-09-15 redeploy — the set app.ens.dev indexes): RootRegistry `0x9703…a9cE`, ETHRegistry `0x657e…E09E`, ETHRegistrar `0xAbe7…94ca`, UserRegistry impl `0xA803…0263`, VerifiableFactory `0x9e72…841C`. Registrar charges MockUSDC `0x16f9…aa8e`. |
 | Aqua | Sepolia | **Not officially deployed on Sepolia.** The official deterministic deployment (`0x1111113c…6a90a`) covers mainnets only, so `Deploy.s.sol` deploys the **unmodified** official `AquaRouter` source (pinned commit). Set `AQUA_ADDRESS` to reuse an existing Aqua. |
 | `BucketSwapVMRouter` | Sepolia | `0x1B99c7FE80b670d0d689B0887302A4a156009b20` — runs only `BucketOpcodes` (0xd0–0xd3 + Deadline + Salt); deliberately narrower than the official upstream router. [Etherscan](https://sepolia.etherscan.io/address/0x1B99c7FE80b670d0d689B0887302A4a156009b20) |
 | `AquaRouter` | Sepolia | `0x219F46B2eC62F36617EA11b8dDC8a83b53261e78` — unmodified official source (no official Sepolia deployment). [Etherscan](https://sepolia.etherscan.io/address/0x219F46B2eC62F36617EA11b8dDC8a83b53261e78) |

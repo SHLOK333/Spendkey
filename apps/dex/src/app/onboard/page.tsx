@@ -1,6 +1,6 @@
 import { ethRegistrarAbi } from '@bucket/sdk'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Bot, Check, CircleDot, ExternalLink, Sparkles, Wallet } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, Check, CircleDot, ExternalLink, Sparkles, Wallet, Zap } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -251,14 +251,87 @@ function Wizard() {
   )
 }
 
-export default function OnboardPage() {
+function Chooser({ onCreate }: { onCreate: () => void }) {
+  const { deployment } = useApp()
+  const demoBucket = deployment.buckets[0]?.ensName ?? deployment.ens?.ownerName ?? 'trading.shlok.eth'
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="grid gap-4 md:grid-cols-2">
+      {/* Instant — shared demo Bucket */}
+      <Card className="flex flex-col p-6">
+        <div className="flex items-center gap-2 text-accent">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15">
+            <Zap className="h-5 w-5" />
+          </span>
+          <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent">Instant</span>
+        </div>
+        <div className="mt-4 text-lg font-semibold">Use a ready-made Bucket</div>
+        <p className="mt-1.5 flex-1 text-sm text-muted">
+          Skip name registration entirely. The <span className="font-mono text-fg">{demoBucket}</span> Bucket is already live with the
+          agent authorized — jump straight in and watch it trade under on-chain limits. Best for a quick look or a demo.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button asChild variant="primary">
+            <Link to="/trade">
+              Trade now <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/agents">
+              <Bot className="h-4 w-4" /> Meet the agent
+            </Link>
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-faint">No registration wait. Owner actions need the Bucket owner&apos;s wallet; the agent runs for everyone.</p>
+      </Card>
+
+      {/* Full — create your own identity */}
+      <Card className="flex flex-col p-6">
+        <div className="flex items-center gap-2 text-brand">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-panel-3 text-fg">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <span className="rounded-full bg-panel-3 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Your own</span>
+        </div>
+        <div className="mt-4 text-lg font-semibold">Create your own identity</div>
+        <p className="mt-1.5 flex-1 text-sm text-muted">
+          Register your own <span className="font-mono text-fg">.eth</span> name on ENSv2, deploy your registry, and spin up your own
+          trading Bucket + agent. Everything is yours. Includes a ~1&nbsp;minute ENS commit/reveal wait.
+        </p>
+        <div className="mt-5">
+          <Button variant="primary" onClick={onCreate}>
+            Create my name <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-faint">A brand-new wallet to a live, agent-managed Bucket — name, identity and all.</p>
+      </Card>
+    </div>
+  )
+}
+
+export default function OnboardPage() {
+  const [mode, setMode] = useState<'choose' | 'create'>('choose')
+
+  return (
+    <div className="mx-auto max-w-3xl">
       <div className="mb-5">
-        <h1 className="text-2xl font-semibold">Start trading from scratch</h1>
-        <p className="mt-1 text-sm text-muted">A brand-new wallet to a live, agent-managed Bucket — name, identity and all.</p>
+        <h1 className="text-2xl font-semibold">{mode === 'create' ? 'Create your identity' : 'Get started'}</h1>
+        <p className="mt-1 text-sm text-muted">
+          {mode === 'create'
+            ? 'A brand-new wallet to a live, agent-managed Bucket — name, identity and all.'
+            : 'Trade on a ready-made Bucket right now, or create your own ENSv2 identity from scratch.'}
+        </p>
       </div>
-      <Wizard />
+      {mode === 'create' ? (
+        <div className="mx-auto max-w-2xl">
+          <button onClick={() => setMode('choose')} className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
+            ← Back to options
+          </button>
+          <Wizard />
+        </div>
+      ) : (
+        <Chooser onCreate={() => setMode('create')} />
+      )}
     </div>
   )
 }
