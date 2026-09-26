@@ -1,0 +1,6 @@
+# Local tools and generated caches are not part of the Vercel source upload.
+.tools/
+**/.next/
+**/dist/
+**/build/
+**/.turbo/
