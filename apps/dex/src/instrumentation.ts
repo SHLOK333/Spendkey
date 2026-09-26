@@ -8,9 +8,11 @@ import path from 'node:path'
 
 import { usd } from '@bucket/protocol-types'
 import { bucketPriceFeedAbi } from '@bucket/sdk'
-import { createPublicClient, createWalletClient, http, isHex } from 'viem'
+import { createPublicClient, createWalletClient, isHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
+
+import { sepoliaTransport } from './lib/server/rpc'
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1_000
 
@@ -40,7 +42,7 @@ async function refreshPrices(): Promise<void> {
   const prices = deployment.evm.tokens.map((t) => usd(PRICE_BY_SYMBOL[t.symbol] ?? '1'))
 
   const account = privateKeyToAccount(rawKey as `0x${string}`)
-  const transport = http(rpcUrl)
+  const transport = sepoliaTransport()
   const publicClient = createPublicClient({ chain: sepolia, transport })
   const walletClient = createWalletClient({ account, chain: sepolia, transport })
 

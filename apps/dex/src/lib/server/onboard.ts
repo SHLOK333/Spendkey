@@ -2,12 +2,13 @@
 import { ENSV2_SEPOLIA, mintableErc20Abi } from '@bucket/sdk'
 import { usd } from '@bucket/protocol-types'
 import { amountOf } from '@bucket/vm'
-import { createWalletClient, formatEther, http, isAddressEqual, parseEther, type Address, type Hex } from 'viem'
+import { createWalletClient, formatEther, isAddressEqual, parseEther, type Address, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
 
 import { loadDeployment } from './deployment'
 import { serverEnv } from './env'
+import { sepoliaTransport } from './rpc'
 
 /**
  * New-owner onboarding faucet (deployer key). A brand-new MetaMask wallet has no Sepolia ETH and no test
@@ -29,7 +30,7 @@ const OPERATOR_TOKENS: Record<string, bigint> = { ETH: 2n * 10n ** 18n, SUI: 500
 function deployerWallet() {
   const key = serverEnv.deployerKey()
   if (!key) throw new Error('DEPLOYER_PRIVATE_KEY is not set in the repository .env')
-  return createWalletClient({ account: privateKeyToAccount(key as Hex), chain: sepolia, transport: http(serverEnv.sepoliaRpcUrl()) })
+  return createWalletClient({ account: privateKeyToAccount(key as Hex), chain: sepolia, transport: sepoliaTransport() })
 }
 
 /** Public onboarding config: the agent operator identity a new owner grants their trading capability to. */

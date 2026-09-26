@@ -1,18 +1,19 @@
 
 import { BucketClient, BucketEvm, EnsV2, type EvmWallet } from '@bucket/sdk'
-import { createPublicClient, createWalletClient, http, type Hex, type PublicClient } from 'viem'
+import { createPublicClient, createWalletClient, type Hex, type PublicClient } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
 
 import { loadDeployment } from './deployment'
 import { serverEnv } from './env'
+import { sepoliaTransport } from './rpc'
 
 let cached: { publicClient: PublicClient; bucket: BucketClient } | null = null
 
 export function evmServer() {
   if (cached) return cached
   const deployment = loadDeployment()
-  const publicClient = createPublicClient({ chain: sepolia, transport: http(serverEnv.sepoliaRpcUrl()) }) as PublicClient
+  const publicClient = createPublicClient({ chain: sepolia, transport: sepoliaTransport() }) as PublicClient
   const evm = new BucketEvm(publicClient, deployment.evm.contracts, BigInt(deployment.evm.startBlock))
   const ens = new EnsV2(publicClient, { rootRegistry: deployment.evm.ens.rootRegistry, ethRegistry: deployment.evm.ens.ethRegistry })
   cached = { publicClient, bucket: new BucketClient(evm, ens, deployment.evm.chainId) }
@@ -26,6 +27,6 @@ export function evmAgentWallet(): EvmWallet | null {
   return createWalletClient({
     account: privateKeyToAccount(key as Hex),
     chain: sepolia,
-    transport: http(serverEnv.sepoliaRpcUrl()),
+    transport: sepoliaTransport(),
   }) as EvmWallet
 }

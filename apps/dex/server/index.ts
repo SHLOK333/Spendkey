@@ -23,11 +23,15 @@ const { AI_COOKIE, resolveAiKey, sealKey } = await import('../src/lib/server/ai-
 const { agentContext } = await import('../src/lib/server/context')
 const { evmServer } = await import('../src/lib/server/evm')
 const { protocolEvents } = await import('../src/lib/server/indexer')
-const { serverEnv } = await import('../src/lib/server/env')
+const { redactRpc, sepoliaRpcUrls } = await import('../src/lib/server/rpc')
 const { onboardConfig, onboardFaucet } = await import('../src/lib/server/onboard')
 const { register } = await import('../src/instrumentation')
 
 const app = new Hono()
+
+// Safety net: no uncaught handler error ever reaches the browser with a provider URL (which embeds the RPC key)
+// still in its message. Every explicit error response is also redacted at its own site.
+app.onError((err, c) => c.json({ error: redactRpc(err instanceof Error ? err.message : String(err)) }, 500))
 
 // --- Public deployment manifest (the single source of contract addresses; no secrets) -----------------------
 app.get('/api/deployment', (c) => {
@@ -47,7 +51,7 @@ app.post('/api/onboard/faucet', async (c) => {
   try {
     return c.json(await onboardFaucet(parsed.data.address as `0x${string}`))
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 502)
   }
 })
 
@@ -56,7 +60,7 @@ app.get('/api/activity', async (c) => {
   try {
     return c.json(await protocolEvents())
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 502)
   }
 })
 
@@ -95,13 +99,20 @@ app.post('/api/rpc', async (c) => {
   if (denied) {
     return c.json({ jsonrpc: '2.0', id: denied?.id ?? null, error: { code: -32601, message: `method ${String(denied?.method)} not allowed` } }, 200)
   }
-  const upstream = await fetch(serverEnv.sepoliaRpcUrl(), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  })
-  return new Response(await upstream.text(), { status: upstream.status, headers: { 'content-type': 'application/json' } })
+  // Walk the configured endpoint then public fallbacks; a rate-limited (429) or failing (5xx) provider fails over
+  // to the next instead of surfacing the error (and its keyed URL) to the browser.
+  const payload = JSON.stringify(body)
+  for (const url of sepoliaRpcUrls()) {
+    const upstream = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, cache: 'no-store' }).catch(() => null)
+    if (!upstream) continue
+    if (upstream.status !== 429 && upstream.status < 500) {
+      return new Response(await upstream.text(), { status: upstream.status, headers: { 'content-type': 'application/json' } })
+    }
+  }
+  // Every endpoint was rate-limited or down: return a well-formed JSON-RPC error (never the raw upstream body,
+  // which would leak the provider URL) so the client shows a clean "try again" instead of a transport crash.
+  const rpcError = (id: unknown) => ({ jsonrpc: '2.0', id: id ?? null, error: { code: -32005, message: 'All RPC endpoints are rate-limited or unavailable. Please try again shortly.' } })
+  return c.json(Array.isArray(body) ? calls.map((call) => rpcError(call?.id)) : rpcError(calls[0]?.id), 200)
 })
 
 // --- Agent: public operator identities + whether an AI provider is set -------------------------------------
@@ -152,7 +163,7 @@ app.post('/api/agent/validate', async (c) => {
   try {
     return c.json(await validateAction(parsed.data))
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 502)
+    return c.json({ error: redactRpc(error instanceof Error ? error.message : String(error)) }, 502)
   }
 })
 
@@ -193,7 +204,7 @@ app.post('/api/agent/chat', async (c) => {
   try {
     context = await agentContext(parsed.data.selection)
   } catch (error) {
-    return c.json({ error: `Could not load Bucket context: ${error instanceof Error ? error.message : String(error)}` }, 502)
+    return c.json({ error: redactRpc(`Could not load Bucket context: ${error instanceof Error ? error.message : String(error)}`) }, 502)
   }
 
   const completion = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -244,7 +255,7 @@ app.post('/api/agent/execute', async (c) => {
   try {
     await verifyApproval(action, approval)
   } catch (error) {
-    return c.json({ error: `Owner approval rejected: ${error instanceof Error ? error.message : String(error)}` }, 403)
+    return c.json({ error: redactRpc(`Owner approval rejected: ${error instanceof Error ? error.message : String(error)}`) }, 403)
   }
   try {
     const { validation, result } = await executeAction(action)
@@ -255,14 +266,14 @@ app.post('/api/agent/execute', async (c) => {
     }
     // Validation passed but the chain rejected at submission (e.g. state changed in between): report it plainly.
     const decoded = decodeBucketError(error)
-    const text = error instanceof Error ? error.message : String(error)
+    const text = redactRpc(error instanceof Error ? error.message : String(error))
     const explained = explainError(decoded?.errorName) ?? explainMoveAbort(text)
     return c.json(
       {
         status: 'failed',
         error: explained?.message ?? 'The transaction failed.',
         title: explained?.title ?? 'Execution failed',
-        detail: decoded?.message ?? text.slice(0, 600),
+        detail: redactRpc(decoded?.message ?? text.slice(0, 600)),
       },
       200,
     )
