@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Pure-black high-contrast surfaces (Jupiter / 1inch / Uniswap) */
+  --color-bg: #08090c;
+  --color-panel: #101116;
+  --color-panel-2: #16171d;
+  --color-panel-3: #1d1f27;
+  --color-line: #23252f;
+  --color-line-2: #2f313d;
+  --color-fg: #f4f5fa;
+  --color-muted: #9297a6;
+  --color-faint: #5b5f6e;
+  /* Lime-green CTA to match the reference DEXs */
+  --color-accent: #c6f24e;
+  --color-accent-fg: #0c1500;
+  --color-brand: #8b93ff;
+  --color-warn: #f5c451;
+  --color-danger: #f87171;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 70% 45% at 15% -5%, rgba(198, 242, 78, 0.05) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 40% at 90% 10%, rgba(139, 147, 255, 0.05) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+  ::selection {
+    background: rgba(198, 242, 78, 0.25);
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  /* Thin, dark scrollbars like the reference apps */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-2) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-2);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
